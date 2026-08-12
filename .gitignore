@@ -13,3 +13,15 @@ frontend/dist/
 node_modules/
 *.log
 .DS_Store
+
+# --- single-user offline fork ---
+# Release signing credentials. The example file is committed; the real one never is.
+frontend/android/keystore.properties
+*.keystore
+
+# Packaged exercise media (~65 MB, 2648 WebP files). Not committed: it is generated
+# from the upstream dataset by tools/fetch_gym_media.sh + tools/convert_gym_media.py,
+# so committing it would put 65 MB in every clone to no benefit. The built APK on the
+# Releases page already contains it.
+frontend/public/gif/
+frontend/public/img/

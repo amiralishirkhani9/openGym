@@ -8,6 +8,7 @@ import { beep, vibrate } from './lib/sound.js'
 import { t, instrFor, getLang, INSTR_LANGS } from './lib/i18n.js'
 import { nav } from './lib/nav.js'
 import { starterRoutines } from './lib/starter.js'
+import { homeRoutines, HOME_DAYS } from './lib/homeplan.js'
 import Media, { Thumb } from './components/Media.jsx'
 import Stepper from './components/Stepper.jsx'
 import Icon from './components/Icon.jsx'
@@ -20,6 +21,9 @@ import { buildPlanBundle, parsePlan, mergePlan, printPlan } from './lib/plan-sha
 import { estimate1RM, best1RM, is1RMRecord, REP_CAP } from './lib/onerm.js'
 import { nextPrescription, applyPrescription, policyFor, defaultIncrement, POLICIES_FOR, POLICY_NAME, POLICY_DESC, MAX_BW_SETS } from './lib/progression.js'
 import { MOBILE, shareExport } from './lib/mobile.js'
+import { useAi, setAi, clearAi, aiReady } from './lib/aiconfig.js'
+import { getProfile, LEVELS, PLACES, GOALS, LIMITS, exercisesForTime } from './lib/coachprofile.js'
+import { listModels, apiRoot, cachedInstr, translateAndCache } from './lib/ai.js'
 
 const S = () => useStore.getState().S
 const update = (...a) => useStore.getState().update(...a)
@@ -43,6 +47,19 @@ export function confirmSheet(opts) {
 }
 
 /* ============================ starter plan ============================ */
+// The no-equipment 3-day plan (lib/homeplan.js). Same shape as loadStarterPlan, except the days
+// come from the spec rather than being hard-coded here — the plan decides its own spacing, and
+// it lands you on the Plan screen because a plan you cannot see is a plan you do not trust.
+export function loadHomePlan() {
+  const rs = homeRoutines()
+  update(st => {
+    st.routines.push(...rs)
+    HOME_DAYS.forEach((d, i) => { st.week[d] = rs[i].id })
+  })
+  nav('/plan')
+  toast(t('Home plan loaded — 3 full-body days, no equipment'))
+}
+
 export function loadStarterPlan() {
   const [push, pull, legs] = starterRoutines()
   update(st => {
@@ -301,9 +318,64 @@ function ExerciseDetail({ ex, close }) {
       <Button variant="danger" icon="trash" style={{ flex: 1 }} onClick={() => deleteCustomEx(ex, close)}>{t('Delete')}</Button>
     </div>}
     {!isCardio(ex) && <OneRM ex={ex} />}
-    {instrFor(ex).length > 0 &&<><h4 className="sec">{t('How to')}{!INSTR_LANGS.includes(getLang()) && <span className="dim" style={{ textTransform: 'none', letterSpacing: 0 }}> · {t('instructions in English')}</span>}</h4><ol className="steps-list">{instrFor(ex).map((s, i) => <li key={i}>{s}</li>)}</ol></>}
+    {instrFor(ex).length > 0 && <Instructions ex={ex} />}
   </>
 }
+
+// Steps, plus an on-demand translation for the languages that have no instr/ pack.
+// Not automatic-on-open by default: it is the user's API budget, and one exercise sheet during
+// a workout should not silently spend a call. With the Settings toggle on it fires once per
+// exercise and is then served from cache.
+function Instructions({ ex }) {
+  const steps = instrFor(ex)
+  const lang = getLang()
+  const cfg = useAi()
+  const canTranslate = !INSTR_LANGS.includes(lang) && aiReady(cfg)
+  const [tr, setTr] = useState(() => canTranslate ? cachedInstr(ex.id, lang) : null)
+  const [show, setShow] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [failed, setFailed] = useState(false)
+
+  const run = async () => {
+    if (busy) return
+    setBusy(true); setFailed(false)
+    try {
+      const lines = await translateAndCache({
+        exId: ex.id, steps, exName: ex.n, lang,
+        base: cfg.base, key: cfg.key, model: cfg.model,
+      })
+      setTr(lines); setShow(true)
+    } catch (e) {
+      setFailed(true)
+      toast(t('Translation failed'))
+    } finally { setBusy(false) }
+  }
+
+  // Auto-run only when the user asked for it and nothing is cached yet.
+  useEffect(() => {
+    if (canTranslate && cfg.autoTranslate && !tr && !busy && !failed) run()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ex.id, lang, canTranslate, cfg.autoTranslate])
+
+  const shown = tr && show ? tr : steps
+
+  return <>
+    <h4 className="sec">{t('How to')}
+      {!INSTR_LANGS.includes(lang) && !(tr && show) &&
+        <span className="dim" style={{ textTransform: 'none', letterSpacing: 0 }}> · {t('instructions in English')}</span>}
+    </h4>
+    {canTranslate && <div className="tr-note">
+      {busy ? <><Icon name="timer" style={{ fontSize: 13 }} />{t('Translating…')}</>
+        : tr ? <><Icon name="sparkles" style={{ fontSize: 13 }} />{show ? t('Translated by AI') : t('Show original')}
+          <button onClick={() => setShow(v => !v)}>{show ? t('Show original') : t('Translated by AI')}</button></>
+          : <button onClick={run}><Icon name="globe" style={{ fontSize: 13 }} /> {t('Translate with AI')}</button>}
+    </div>}
+    <ol className="steps-list" dir={tr && show ? undefined : 'ltr'} style={tr && show ? null : { textAlign: 'left' }}>
+      {shown.map((s, i) => <li key={i}>{s}</li>)}
+    </ol>
+  </>
+}
+
 export const exerciseDetailSheet = ex => ui().openSheet(close => <ExerciseDetail ex={ex} close={close} />)
 
 /* ============================ add to routine ============================ */
@@ -627,12 +699,11 @@ export const planToolsSheet = () => ui().openSheet(close => <PlanTools close={cl
 
 function PlanTools({ close }) {
   const st = useStore(s => s.S)
-  const user = useStore(s => s.user)
   const fileRef = useRef(null)
   const hasRoutines = (st.routines || []).some(r => r.ex && r.ex.length)
 
   const exportFile = async () => {
-    const bundle = buildPlanBundle(st, user?.name ? t('{0}’s plan', user.name) : '')
+    const bundle = buildPlanBundle(st, '')
     const json = JSON.stringify(bundle, null, 2)
     const name = 'opengym-plan-' + todayISO() + '.json'
     if (MOBILE) { try { await shareExport(json, name) } catch (e) { /* dismissed */ } close(); return }
@@ -967,3 +1038,193 @@ function doFinishWorkout() {
   beep(snd(), 880, 0.15); beep(snd(), 1100, 0.15, 0.18); beep(snd(), 1320, 0.3, 0.36)
   ui().openSheet(close => <FinishSummary w={w} prs={prs} e1prs={e1prs} close={close} />, { kind: 'center', locked: true })
 }
+
+/* ============================ AI coach ============================ */
+// Setup lives in a sheet rather than a Settings sub-page so it can be opened from the coach
+// screen itself when a request fails for want of a key.
+//
+// The model list is fetched from /v1/models rather than typed, because the id has to match
+// exactly and a typo comes back as an opaque 404 from the provider.
+function AiSetup({ close }) {
+  const cfg = useAi()
+  const [base, setBase] = useState(cfg.base || '')
+  const [key, setKey] = useState(cfg.key || '')
+  const [model, setModel] = useState(cfg.model || '')
+  const [models, setModels] = useState([])
+  const [state, setState] = useState('idle')   // idle | loading | ok | err
+  const [err, setErr] = useState('')
+
+  const fetchModels = async () => {
+    if (!base.trim()) { setErr(t('Enter a valid URL')); setState('err'); return }
+    if (!key.trim()) { setErr(t('Enter your API key')); setState('err'); return }
+    setState('loading'); setErr('')
+    try {
+      const list = await listModels(base, key.trim())
+      setModels(list)
+      setState('ok')
+      if (!list.length) { setErr(t('No models found')); setState('err'); return }
+      // Keep the current pick if the provider still offers it, otherwise take the first.
+      if (!list.some(m => m.id === model)) setModel(list[0].id)
+    } catch (e) {
+      setErr(e.message || t('Cannot connect')); setState('err')
+    }
+  }
+
+  const save = () => {
+    if (!base.trim() || !key.trim() || !model) return
+    setAi({ base: apiRoot(base), key: key.trim(), model })
+    close()
+    toast(t('Saved'))
+    nav('/coach')
+  }
+
+  const forget = () => {
+    clearAi()
+    close()
+    toast(t('API key removed'))
+  }
+
+  return <>
+    <h3>{t('AI Coach Setup')}</h3>
+    <div className="muted small" style={{ marginBottom: 14 }}>{t('Connect an OpenAI-compatible or Anthropic API to use the AI coach.')}</div>
+
+    <label className="fl">{t('API Base URL')}</label>
+    <input className="field" value={base} onChange={e => setBase(e.target.value)}
+      placeholder={t('e.g. api.openai.com')} autoCapitalize="off" autoCorrect="off" spellCheck="false" inputMode="url" dir="ltr" />
+    {/* Anthropic speaks a different wire format, chosen automatically from the host — so the
+        only thing the user has to get right is the URL. */}
+    <div className="small dim" style={{ marginTop: 5 }}>
+      {t('For Claude, paste api.anthropic.com')}
+    </div>
+
+    <label className="fl">{t('API Key')}</label>
+    <input className="field" type="password" value={key} onChange={e => setKey(e.target.value)}
+      placeholder={t('Paste your key')} autoCapitalize="off" autoCorrect="off" spellCheck="false" dir="ltr" />
+
+    <div style={{ height: 12 }} />
+    <Button icon="download" onClick={fetchModels} disabled={state === 'loading'}>
+      {state === 'loading' ? t('Loading models…') : t('Fetch models')}
+    </Button>
+
+    {state === 'err' && <div className="small" style={{ color: 'var(--red)', marginTop: 8, wordBreak: 'break-word' }}>{err}</div>}
+
+    {models.length > 0 && <>
+      <div className="small dim" style={{ margin: '12px 0 6px' }}>{t('{0} models found', models.length)}</div>
+      <label className="fl">{t('Model')}</label>
+      <select className="field" value={model} onChange={e => setModel(e.target.value)} dir="ltr">
+        {models.map(m => <option key={m.id} value={m.id}>{m.provider ? m.provider + ' · ' : ''}{m.name}</option>)}
+      </select>
+    </>}
+
+    <div style={{ height: 16 }} />
+    <button className="btn primary" onClick={save} disabled={!base.trim() || !key.trim() || !model}>{t('Save & Start')}</button>
+    {cfg.key && <>
+      <div style={{ height: 8 }} />
+      <Button variant="ghost" className="dim" icon="trash" onClick={forget}>{t('Remove API key')}</Button>
+    </>}
+    <div className="small dim" style={{ marginTop: 14, lineHeight: 1.5 }}>
+      {t('Your API key is stored locally on this device and never shared.')}
+      <br />{t('Supported providers')}: OpenAI · Anthropic (Claude) · OpenRouter · Groq · Together · DeepSeek · Ollama · LM Studio
+    </div>
+  </>
+}
+export const aiSetupSheet = () => ui().openSheet(close => <AiSetup close={close} />)
+
+/* ============================ coach profile ============================ */
+// The facts a plan is built from, as a form instead of a conversation.
+//
+// Asking for these in the chat box does not work: a plan needs six or seven specifics, most people
+// give two, and the model fills the rest in with a guess — usually a barbell programme for someone
+// with an empty living room. Stored in S (not localStorage like the API key): it is not a secret,
+// it belongs in a backup, and the self-hosted build should carry it between devices.
+function CoachProfile({ close, onBuild }) {
+  const [p, setP] = useState(() => getProfile(S()))
+
+  const set = patch => setP(v => ({ ...v, ...patch }))
+  const toggle = (field, value, { min = 0 } = {}) => {
+    const cur = p[field] || []
+    const next = cur.includes(value) ? cur.filter(x => x !== value) : [...cur, value]
+    if (next.length < min) return          // never leave the model with zero days or zero goals
+    set({ [field]: next })
+  }
+
+  const save = () => {
+    // _set marks the profile as answered, so the prompt can stop calling it "defaults".
+    update(st => { st.coach = { ...p, _set: true } })
+    return true
+  }
+
+  const LEVEL_LABEL = {
+    beginner: t('Just starting out'),
+    returning: t('Coming back after a break'),
+    intermediate: t('A year or more of training'),
+    advanced: t('Several years, advanced'),
+  }
+  const GOAL_LABEL = {
+    fat_loss: t('Lose fat'),
+    strength: t('Get stronger'),
+    muscle: t('Build muscle'),
+    endurance: t('Conditioning'),
+    general: t('General fitness'),
+  }
+
+  return <>
+    <h3>{t('Your training profile')}</h3>
+    <div className="muted small" style={{ marginBottom: 14 }}>
+      {t('The coach builds and updates your plan from this. Fill it in once.')}
+    </div>
+
+    <label className="fl">{t('Experience')}</label>
+    <select className="field" value={p.level} onChange={e => set({ level: e.target.value })}>
+      {LEVELS.map(l => <option key={l} value={l}>{LEVEL_LABEL[l]}</option>)}
+    </select>
+
+    <label className="fl">{t('Training days')}</label>
+    <div className="mchips">
+      {[1, 2, 3, 4, 5, 6, 0].map(d => (
+        <button key={d} className={'chip' + ((p.days || []).includes(d) ? ' on' : '')}
+          onClick={() => toggle('days', d, { min: 1 })}>{t(DAYN[d])}</button>
+      ))}
+    </div>
+
+    <label className="fl">{t('Where you train')}</label>
+    <select className="field" value={p.place} onChange={e => set({ place: e.target.value })}>
+      {Object.entries(PLACES).map(([k, v]) => <option key={k} value={k}>{t(v.label)}</option>)}
+    </select>
+
+    <label className="fl">{t('Goals')}</label>
+    <div className="mchips">
+      {GOALS.map(g => (
+        <button key={g} className={'chip' + ((p.goals || []).includes(g) ? ' on' : '')}
+          onClick={() => toggle('goals', g, { min: 1 })}>{GOAL_LABEL[g]}</button>
+      ))}
+    </div>
+
+    <label className="fl">{t('Session length')}: {p.sessionMin} {t('min')} · {t('{0} exercises', exercisesForTime(p.sessionMin))}</label>
+    <Slider value={p.sessionMin} min={20} max={120} step={5} onChange={v => set({ sessionMin: v })} />
+
+    <label className="fl">{t('Injuries — areas to avoid loading')}</label>
+    <div className="mchips">
+      {Object.entries(LIMITS).map(([k, v]) => (
+        <button key={k} className={'chip' + ((p.limits || []).includes(k) ? ' on' : '')}
+          onClick={() => toggle('limits', k)}>{t(v.label)}</button>
+      ))}
+    </div>
+
+    <label className="fl">{t('Anything else the coach should know')}</label>
+    <textarea className="field area" value={p.notes} maxLength={400}
+      placeholder={t('e.g. I hate burpees, I have 20 minutes on Fridays')}
+      onChange={e => set({ notes: e.target.value })} />
+
+    <div style={{ height: 16 }} />
+    <button className="btn primary" onClick={() => { save(); close(); onBuild && onBuild() }}>
+      {t('Build my plan')}
+    </button>
+    <div style={{ height: 8 }} />
+    <Button onClick={() => { save(); close(); toast(t('Profile saved')) }}>{t('Save only')}</Button>
+  </>
+}
+
+// onBuild fires after the profile is saved — the coach screen passes a sender so the answer to
+// "Build my plan" is a plan, not a form that was filled in and then forgotten about.
+export const coachProfileSheet = onBuild => ui().openSheet(close => <CoachProfile close={close} onBuild={onBuild} />)

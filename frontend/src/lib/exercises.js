@@ -13,10 +13,22 @@ const SECONDARY_ADDITIONS = {
   '0861': ['rear deltoids'], // cable seated row
 }
 
+// A few upstream entries are labelled with a muscle instead of a movement — id 3533's
+// instructions describe a bodyweight squat but its name is literally "quads", which renders as a
+// body part in every list, in the routine editor and mid-workout. Renaming here (rather than
+// editing the generated dataset) survives a dataset refresh, same as SECONDARY_ADDITIONS.
+const NAME_FIXES = {
+  '3533': 'bodyweight squat',
+  '3013': 'glute bridge',
+  '1352': 'back extension on floor',
+  '3636': 'high knees (wall support)',
+}
+
 export const EXIDX = {}
 EXDB.forEach(e => {
   const additions = SECONDARY_ADDITIONS[e.id]
   if (additions) e.sm = [...new Set([...(e.sm || []), ...additions])]
+  if (NAME_FIXES[e.id]) e.n = NAME_FIXES[e.id]
   EXIDX[e.id] = e
 })
 export const BODYPARTS = [...new Set(EXDB.map(e => e.bp))].sort()
@@ -48,8 +60,14 @@ export const allExercises = st => [...(st.customEx || []), ...EXDB]
 const ENV = import.meta.env || {}
 const IMG_BASE = ENV.VITE_IMG_BASE || 'img/'
 const GIF_BASE = ENV.VITE_GIF_BASE || 'gif/'
-export const imgSrc = ex => IMG_BASE + ex.img
-export const gifSrc = ex => GIF_BASE + ex.gif
+// The packaged media is WebP: animated for the movement, still for thumbnails.
+// The dataset still names .gif/.jpg, so the extension is swapped here instead of
+// in 1324 dataset entries, which a dataset refresh would overwrite. An override
+// (VITE_IMG_BASE) that points at the original files keeps working, since only
+// the extension is rewritten and the stems are identical.
+const webp = name => name.replace(/\.(gif|jpg|jpeg|png)$/i, '.webp')
+export const imgSrc = ex => IMG_BASE + webp(ex.img)
+export const gifSrc = ex => GIF_BASE + webp(ex.gif)
 
 // Cardio exercises log time + speed instead of weight × reps.
 export const isCardio = idOrEx => (typeof idOrEx === 'string' ? EXIDX[idOrEx] : idOrEx)?.bp === 'cardio'

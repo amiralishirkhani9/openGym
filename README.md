@@ -1,3 +1,6 @@
+> **این یک فورک است.** نسخهٔ تک‌کاربره، فارسی و کاملاً آفلاین — بدون حساب کاربری و بدون سرور.
+> توضیح تغییرات و لینک دانلود APK: **[README.fa.md](README.fa.md)**
+
 <div align="center">
 
 <img src="assets/banner.png" alt="openGym" width="720">

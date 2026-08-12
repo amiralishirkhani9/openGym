@@ -7,8 +7,6 @@ import { lastEntryFor, bestWeightFor, buildSets, effectiveRoutineId, workoutVolu
 import { beep, vibrate } from './lib/sound.js'
 import { t, instrFor, getLang, INSTR_LANGS } from './lib/i18n.js'
 import { nav } from './lib/nav.js'
-import { starterRoutines } from './lib/starter.js'
-import { homeRoutines, HOME_DAYS } from './lib/homeplan.js'
 import Media, { Thumb } from './components/Media.jsx'
 import Stepper from './components/Stepper.jsx'
 import Icon from './components/Icon.jsx'
@@ -44,29 +42,6 @@ function ConfirmDialog({ title, message, confirmText, cancelText, danger, onConf
 // Themed replacement for window.confirm — callback-based (no blocking).
 export function confirmSheet(opts) {
   ui().openSheet(close => <ConfirmDialog {...opts} close={close} />, { kind: 'center' })
-}
-
-/* ============================ starter plan ============================ */
-// The no-equipment 3-day plan (lib/homeplan.js). Same shape as loadStarterPlan, except the days
-// come from the spec rather than being hard-coded here — the plan decides its own spacing, and
-// it lands you on the Plan screen because a plan you cannot see is a plan you do not trust.
-export function loadHomePlan() {
-  const rs = homeRoutines()
-  update(st => {
-    st.routines.push(...rs)
-    HOME_DAYS.forEach((d, i) => { st.week[d] = rs[i].id })
-  })
-  nav('/plan')
-  toast(t('Home plan loaded — 3 full-body days, no equipment'))
-}
-
-export function loadStarterPlan() {
-  const [push, pull, legs] = starterRoutines()
-  update(st => {
-    st.routines.push(push, pull, legs)
-    st.week[1] = push.id; st.week[3] = pull.id; st.week[5] = legs.id
-  })
-  toast(t('Starter plan loaded — Mon Push · Wed Pull · Fri Legs'))
 }
 
 /* ============================ weight picker (shared: body weight + goal) ============================ */

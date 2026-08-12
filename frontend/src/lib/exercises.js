@@ -60,14 +60,19 @@ export const allExercises = st => [...(st.customEx || []), ...EXDB]
 const ENV = import.meta.env || {}
 const IMG_BASE = ENV.VITE_IMG_BASE || 'img/'
 const GIF_BASE = ENV.VITE_GIF_BASE || 'gif/'
-// The packaged media is WebP: animated for the movement, still for thumbnails.
-// The dataset still names .gif/.jpg, so the extension is swapped here instead of
-// in 1324 dataset entries, which a dataset refresh would overwrite. An override
-// (VITE_IMG_BASE) that points at the original files keeps working, since only
-// the extension is rewritten and the stems are identical.
-const webp = name => name.replace(/\.(gif|jpg|jpeg|png)$/i, '.webp')
-export const imgSrc = ex => IMG_BASE + webp(ex.img)
-export const gifSrc = ex => GIF_BASE + webp(ex.gif)
+// The dataset names .gif/.jpg, so extensions are swapped here rather than in 1324
+// dataset entries that a refresh would overwrite. The stems are identical, so an
+// override (VITE_IMG_BASE) pointing at the original files still resolves.
+//
+// Stills are WebP. Animations are H.264 in MP4, not animated WebP: the clips are
+// 4-12 frames of a nearly static figure, which inter-frame prediction handles
+// far better than a format that pays close to full price per frame. Measured over
+// a sample of the set, at 540x540: animated WebP q75 came to ~115 MB across the
+// 1324 exercises, H.264 crf20 to ~57 MB. That is what pays for tripling the
+// resolution without growing the download.
+const swap = (name, ext) => name.replace(/\.(gif|jpg|jpeg|png|mp4|webp)$/i, ext)
+export const imgSrc = ex => IMG_BASE + swap(ex.img, '.webp')
+export const gifSrc = ex => GIF_BASE + swap(ex.gif, '.mp4')
 
 // Cardio exercises log time + speed instead of weight × reps.
 export const isCardio = idOrEx => (typeof idOrEx === 'string' ? EXIDX[idOrEx] : idOrEx)?.bp === 'cardio'

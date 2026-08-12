@@ -3,12 +3,13 @@ import { createRoot } from 'react-dom/client'
 import { parseHTML } from 'linkedom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-// The first screen after a fresh install. The failure this guards against is the one the whole
-// seed exists to prevent: Home rendering its "Welcome! load a plan" empty state, or a week strip
-// with no planned days, because state was seeded in a shape Home does not read.
+// The first screen after a fresh install. A fresh install no longer gets a preset plan, so
+// what this pins is that the empty state is a usable starting point rather than a dead end:
+// it offers the two routes to a plan (build it, or have the coach write it) and it renders in
+// Persian, which is the default language.
 //
-// Home is mounted for real against a seeded state — effectiveRoutine, the week strip and the
-// glyph lookup are the actual implementations.
+// Home is mounted for real — effectiveRoutine, the week strip and the glyph lookup are the
+// actual implementations.
 //
 // Everything is imported statically and there is no resetModules: i18n keeps its dictionary in
 // module scope, and a registry reset hands the mock factory and the module under test two
@@ -26,8 +27,6 @@ vi.mock('../sheets.jsx', () => ({
   dayOverrideSheet: d => mocks.sheets.push('day:' + d),
   calendarSheet: () => mocks.sheets.push('cal'),
   startFlow: id => mocks.sheets.push('start:' + id),
-  loadStarterPlan: () => mocks.sheets.push('starter'),
-  loadHomePlan: () => mocks.sheets.push('home'),
   bwDeltaColor: () => 'var(--green)',
   aiSetupSheet: () => mocks.sheets.push('aiSetup'),
 }))
@@ -57,7 +56,7 @@ vi.mock('../lib/i18n.js', async () => {
 
 import Home from '../views/Home.jsx'
 import { seedFirstRun } from '../lib/firstrun.js'
-import { HOME_DAYS } from '../lib/homeplan.js'
+import { setLang } from '../lib/i18n.js'
 import { getLang, _setLangState } from '../lib/i18n-core.js'
 
 const freshState = () => ({
@@ -123,32 +122,42 @@ describe('the AI coach shortcut on Home', () => {
   })
 })
 
-describe('Home after a first-run seed', () => {
-  it('shows the empty state when nothing is seeded', async () => {
+describe('Home on a fresh install', () => {
+  it('shows the welcome state, since there is no plan yet', async () => {
     await mount()
     expect(text()).toContain('Welcome!')
   })
 
-  it('does not show the empty state once the plan is seeded', async () => {
-    await seedFirstRun(mocks.S, { lang: '', bodyweight: 0 })
+  it('offers no preset plan to load', async () => {
+    // The two canned plans are gone. If either button comes back, the empty state is
+    // handing out a programme again.
     await mount()
-    expect(text()).not.toContain('Welcome!')
+    expect(text()).not.toMatch(/Push \/ Pull \/ Legs/)
+    expect(text()).not.toMatch(/no equipment/i)
+    expect(mocks.sheets).not.toContain('starter')
+    expect(mocks.sheets).not.toContain('home')
   })
 
-  it('marks the seeded days as planned on the week strip', async () => {
-    await seedFirstRun(mocks.S, { lang: '', bodyweight: 0 })
+  it('offers both routes to a plan: build it, or let the coach write it', async () => {
     await mount()
-    const planned = container.querySelectorAll('.dot.plan, .dot.done')
-    expect(planned.length).toBe(HOME_DAYS.length)
+    expect(text()).toContain('Build my own plan')
+    expect(text()).toContain('Let the AI coach write one')
   })
 
-  it('offers a real session on a planned day rather than "Rest day"', async () => {
-    await seedFirstRun(mocks.S, { lang: '', bodyweight: 0 })
-    // Pin today onto one of the plan's days via the per-day override Home reads first.
-    mocks.S.dayPlan[todayISO()] = mocks.S.routines[0].id
+  it('the build-my-own button goes to the plan screen', async () => {
     await mount()
-    expect(text()).toContain(mocks.S.routines[0].name)
-    expect(text()).toContain('Start')
+    const btn = [...container.querySelectorAll('button')]
+      .find(b => b.textContent.includes('Build my own plan'))
+    await act(async () => { btn.dispatchEvent(new dom.Event('click', { bubbles: true })) })
+    expect(mocks.navs).toContain('/plan')
+  })
+
+  it('seeding leaves the week empty', async () => {
+    await seedFirstRun(mocks.S, { lang: '', bodyweight: 0 })
+    await mount()
+    expect(mocks.S.routines).toEqual([])
+    expect(container.querySelectorAll('.dot.plan, .dot.done')).toHaveLength(0)
+    expect(text()).toContain('Welcome!')
   })
 
   it('shows the seeded starting weight', async () => {
@@ -157,16 +166,13 @@ describe('Home after a first-run seed', () => {
     expect(text()).toContain('80')
   })
 
-  it('renders in Persian when seeded in Persian', async () => {
-    await seedFirstRun(mocks.S, { lang: 'fa', bodyweight: 80 })
+  it('renders the welcome state in Persian, the default language', async () => {
+    await setLang('fa')
     expect(getLang()).toBe('fa')
-    // Routine names are stored strings, translated once at creation — so this is the assertion
-    // that the seed ran *after* the locale pack loaded. See the comment on seedFirstRun.
-    for (const r of mocks.S.routines) expect(r.name, r.name).toMatch(/[\u0600-\u06FF]/)
-    mocks.S.dayPlan[todayISO()] = mocks.S.routines[0].id
     await mount()
-    expect(text()).toContain(mocks.S.routines[0].name)
-    expect(text()).not.toContain('Rest day')
+    // The screen the app opens on must be translated, not a half-English fallback.
+    expect(text()).toMatch(/[\u0600-\u06FF]/)
     expect(text()).not.toContain('Welcome!')
+    expect(text()).not.toContain('Build my own plan')
   })
 })

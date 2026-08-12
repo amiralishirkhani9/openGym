@@ -10,7 +10,7 @@ import { t, LANGS, INSTR_LANGS, isRTL } from '../lib/i18n.js'
 import { useAi, aiReady, setAi } from '../lib/aiconfig.js'
 import { DEMO, REPO } from '../lib/demo.js'
 import { MOBILE, shareExport, syncReminder } from '../lib/mobile.js'
-import { loadStarterPlan, loadHomePlan, confirmSheet, importFromApp, aiSetupSheet, coachProfileSheet } from '../sheets.jsx'
+import { confirmSheet, importFromApp, aiSetupSheet, coachProfileSheet } from '../sheets.jsx'
 import { hasProfile } from '../lib/coachprofile.js'
 import Icon from '../components/Icon.jsx'
 import { Section, Row, SelectRow, Switch, Segmented, Button, TextField } from '../components/ui.jsx'
@@ -166,10 +166,6 @@ export default function Settings() {
 
     {/* ---------- data: fill it, bring things over, back it up, wipe it ---------- */}
     <Section title={t('Data')}>
-      <Row icon="house" iconTint="var(--acc)" title={t('Load home plan (no equipment)')}
-        subtitle={t('3 full-body days a week — floor, wall and a towel')}
-        accessory="chevron" onClick={loadHomePlan} />
-      <Row icon="sparkles" iconTint="var(--acc)" title={t('Load starter plan (PPL)')} accessory="chevron" onClick={loadStarterPlan} />
       <Row icon="shuffle" iconTint="var(--teal)" title={t('Import from another app')}
         subtitle={t('FitNotes, Strong, Hevy — or body weight from Apple Health')}
         accessory="chevron" onClick={() => importRef.current.click()} />

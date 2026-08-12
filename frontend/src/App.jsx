@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { HashRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
-import { useStore } from './store/useStore.js'
+import { useStore, DEF } from './store/useStore.js'
 import { useUI } from './store/useUI.js'
 import { bindUI } from './components/ui.jsx'
 import { ACCENTS } from './lib/format.js'
@@ -41,10 +41,10 @@ function Shell() {
   const langV = useLang()   // re-renders the whole shell when the language (pack) changes
   useEffect(() => { setNav(navigate) }, [navigate])
   useEffect(() => { applyPrefs(S.theme, S.accent) }, [S.theme, S.accent])
-  useEffect(() => { setLang(S.lang || 'en') }, [S.lang])
+  useEffect(() => { setLang(S.lang || DEF.lang) }, [S.lang])
   useEffect(() => {
     const de = document.documentElement
-    const l = S.lang || 'en'
+    const l = S.lang || DEF.lang
     const rtl = isRTL(l)
     de.lang = l
     de.dir = rtl ? 'rtl' : 'ltr'

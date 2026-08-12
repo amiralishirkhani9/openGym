@@ -4,7 +4,7 @@ import { useStore } from '../store/useStore.js'
 import { effectiveRoutine, effectiveRoutineId, streakWeeks, lastBW, setsDoneActive } from '../lib/history.js'
 import { fmtNum, fmtDate, todayISO, isoOf, weekKey, DAYS } from '../lib/format.js'
 import { t, dateLocale } from '../lib/i18n.js'
-import { bwSheet, goalSheet, dayOverrideSheet, calendarSheet, startFlow, loadStarterPlan, loadHomePlan, bwDeltaColor, aiSetupSheet } from '../sheets.jsx'
+import { bwSheet, goalSheet, dayOverrideSheet, calendarSheet, startFlow, bwDeltaColor, aiSetupSheet } from '../sheets.jsx'
 import { useAi, aiReady } from '../lib/aiconfig.js'
 import LineChart from '../components/LineChart.jsx'
 import Icon from '../components/Icon.jsx'
@@ -97,12 +97,10 @@ export default function Home() {
           <span className="lrow-i"><Icon name="sparkles" /></span>
           <div className="big" style={{ fontSize: 22 }}>{t('Welcome!')}</div>
         </div>
-        <div className="muted small" style={{ marginBottom: 12 }}>{t('Set up your weekly routine to get going — or load a ready-made plan.')}</div>
-        {/* Home plan first: it needs nothing but a floor, so it is the one a new install can
-            actually start today. The gym plan assumes a barbell and a rack. */}
-        <Button variant="primary" icon="house" onClick={loadHomePlan}>{t('Home plan — no equipment (3 days)')}</Button>
-        <div style={{ height: 8 }} /><Button icon="barbell" onClick={loadStarterPlan}>{t('Gym plan — Push / Pull / Legs')}</Button>
-        <div style={{ height: 8 }} /><Button onClick={() => nav('/plan')}>{t('Build my own plan')}</Button>
+        <div className="muted small" style={{ marginBottom: 12 }}>{t('Set up your weekly routine to get going.')}</div>
+        <Button variant="primary" onClick={() => nav('/plan')}>{t('Build my own plan')}</Button>
+        <div style={{ height: 8 }} />
+        <Button icon="sparkles" onClick={() => aiReady(ai) ? nav('/coach') : aiSetupSheet()}>{t('Let the AI coach write one')}</Button>
       </div>
     )}
 

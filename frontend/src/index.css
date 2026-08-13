@@ -41,6 +41,34 @@
   --yellow:#ffd60a; --teal:#40c8e0; --indigo:#5e5ce6; --pink:#ff375f;
   --purple:#bf5af2; --mint:#63e6e2; --brown:#ac8e68; --grey:#8e8e93;
 
+  /* Controls. Separate tokens rather than reusing the surface ramp, because the
+     segmented track and the switch track mean different things and were previously
+     both --surface-3. The selected pill must stay LIGHTER than the track in dark mode
+     and DARKER in light mode -- i.e. "selected = raised" in both -- which a single
+     shared surface cannot express. */
+  --seg-track: #242426;   /* recessed below the card fill (#1c1c1e) */
+  --sw-off:    #3a3a3c;   /* switch, off */
+  /* The selected pill carries the accent, like every other "this one is on" surface in the
+     app (switch track, FAB, active tab). It used to be a flat grey, which is why the
+     control read as belonging to a different app than the switches next to it.
+     --on-seg is its own token rather than a reuse of --on-acc: --on-acc was chosen against
+     WCAG's 3:1 large-text bar for 17px/600 buttons and is white for half the accents, but
+     segmented labels are 14px/600 -- not "large" -- so the bar is 4.5:1. Measured over all
+     8 accents x 2 themes, black clears it everywhere (worst 5.08); white clears it on only
+     4 of 16. tools/seg_contrast.py has the table. */
+  --seg-pill:  var(--acc);
+  --seg-ring:  var(--acc-2);
+  --on-seg:    #000000;
+  /* The UNSELECTED label needs its own colour too, and this one was already failing before
+     the pill was retinted. --label-2 is 60% opacity, which lands on 5.61:1 over the dark
+     track but only 3.24:1 over the light one -- under the 4.5:1 bar for 14px text. The
+     recessed track is lighter than the card it sits in, so a secondary label that passes
+     everywhere else does not pass here. Raised per theme to the point where it clears the
+     bar -- 62% dark (6.9:1), 78% light (4.75:1) -- while still reading as secondary next to
+     the 600-weight selected label. Going to full strength would fix the ratio by erasing
+     the distinction, which is not a fix. */
+  --seg-label: rgba(235,235,245,.62);
+
   /* accent (per-account, synced) */
   --acc:  var(--green);
   --acc-2:#248a3d;
@@ -75,6 +103,12 @@
 
   --sep:       rgba(60,60,67,.29);
   --sep-op:    rgba(60,60,67,.20);
+
+  /* The pill stays the accent in light mode too -- it inherits --seg-pill from :root. Only
+     the track and the unselected label change. */
+  --seg-track: rgba(118,118,128,.12);
+  --seg-label: rgba(60,60,67,.78);
+  --sw-off:    rgba(120,120,128,.16);
 
   --blue:#007aff; --green:#34c759; --red:#ff3b30; --orange:#ff9500;
   --yellow:#ffcc00; --teal:#30b0c7; --indigo:#5856d6; --pink:#ff2d55;
@@ -414,7 +448,7 @@ h4.sec{
 
 /* --- switch --- */
 .sw{
-  width:51px;height:31px;border-radius:99px;background:var(--surface-3);
+  width:51px;height:31px;border-radius:99px;background:var(--sw-off);
   flex:none;padding:2px;display:flex;align-items:center;
   transition:background var(--med) var(--ease);
 }
@@ -434,28 +468,49 @@ h4.sec{
    into a grid area, so the sliding thumb resolved top/bottom against the wrong
    box and overflowed the track. A flex container leaves abspos children on the
    padding box, which is what the thumb needs. */
+/* The track is recessed and the selected pill is raised and ACCENT-COLOURED, in both
+   themes. Two earlier versions of this were wrong in different ways: first a #1c1c1e pill
+   on a #3a3a3c track (the selection was darker than its own track, so the chosen option
+   read as a gap and the unchosen ones as the buttons), then a neutral grey pill -- legible,
+   but the only "selected" state in the app that did not use the accent, sitting inches from
+   switches that did.
+
+   The pill is drawn with BOTH an accent fill and a darker --acc-2 ring, because neither
+   alone clears WCAG 1.4.11's 3:1 boundary requirement in both themes: in dark the fill is
+   well clear of the #242426 track (worst 4.25) while the ring is not (2.57); in light the
+   near-white track kills the fill (lime 1.86) while the ring is comfortable (3.19). Drawing
+   both means whichever has contrast in that theme provides the boundary -- 16/16 pass. */
 .seg{
   position:relative;display:flex;
-  background:var(--surface-3);border-radius:9px;padding:2px;isolation:isolate;
+  background:var(--seg-track);border-radius:9px;padding:2px;isolation:isolate;
+  /* a hairline keeps the recessed track from dissolving into the card behind it */
+  box-shadow:inset 0 0 0 var(--hair) var(--sep-op);
 }
 .seg>button{flex:1 1 0;min-width:0}
-:root[data-theme="light"] .seg{background:rgba(118,118,128,.12)}
 .seg-sel{
   position:absolute;z-index:0;top:2px;bottom:2px;left:2px;
   width:calc((100% - 4px)/var(--n));
   transform:translateX(calc(100% * var(--i)));
-  background:var(--surface);border-radius:7px;
-  box-shadow:0 3px 8px rgba(0,0,0,.12),0 1px 1px rgba(0,0,0,.06);
+  background:var(--seg-pill);border-radius:7px;
+  /* inset ring, not a border: a border would change the pill's box and knock the sliding
+     transform out of alignment with the track's padding box by 1px on each side. */
+  box-shadow:
+    inset 0 0 0 1px var(--seg-ring),
+    0 3px 8px color-mix(in srgb, var(--acc) 30%, transparent),
+    0 1px 1px rgba(0,0,0,.12);
   transition:transform var(--med) var(--ease);
 }
-:root[data-theme="light"] .seg-sel{background:#fff}
 .seg button{
   position:relative;z-index:1;padding:6px 8px;font-size:14px;font-weight:500;
   letter-spacing:-.006em;color:var(--label);display:flex;align-items:center;
-  justify-content:center;gap:5px;min-height:30px;transition:opacity var(--fast);
+  justify-content:center;gap:5px;min-height:30px;
+  transition:opacity var(--fast),color var(--fast);
 }
 .seg button .icn{font-size:16px}
-.seg button:not(.on){color:var(--label-2);font-weight:400}
+/* Weight carries the selection alongside the pill and its colour, so the state survives for
+   anyone who cannot separate the two hues. */
+.seg button:not(.on){color:var(--seg-label);font-weight:400}
+.seg button.on{color:var(--on-seg);font-weight:600}
 .seg button:active{opacity:.5}
 /* sitting in a list row: shrink to content instead of filling the row */
 .seg-inline{flex:none;min-width:132px}
@@ -873,7 +928,14 @@ h4.sec{
 .swatches{display:flex;gap:12px;flex-wrap:wrap}
 .swatch{width:32px;height:32px;border-radius:50%;flex:none;position:relative;transition:transform var(--fast)}
 .swatch:active{transform:scale(.9)}
-.swatch.on::after{content:'';position:absolute;inset:-4px;border-radius:50%;box-shadow:0 0 0 2px var(--label)}
+/* Ring in the swatch's own colour with a background-coloured gap, so the marker reads
+   as "this one is on" instead of as a white dot sitting on top of the colour. Using
+   --label here meant a pure-white ring in dark mode that was louder than the swatch.
+   currentColor works because Settings sets `color` to the same value as `background`. */
+.swatch.on::after{
+  content:'';position:absolute;inset:-4px;border-radius:50%;
+  box-shadow:0 0 0 2.5px var(--bg),0 0 0 4.5px currentColor;
+}
 
 /* --- supersets --- */
 .ss-label{

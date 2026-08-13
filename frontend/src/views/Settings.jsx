@@ -157,8 +157,11 @@ export default function Settings() {
         <span className="lrow-t">{t('Accent color')}</span>
         <div className="swatches">
           {Object.entries(ACCENTS).map(([k, c]) => (
+            /* `color` as well as `background`: the selected ring is drawn with
+               currentColor so it picks up the swatch's own hue instead of painting a
+               white dot over it. */
             <button key={k} className={'swatch' + ((S.accent || 'lime') === k ? ' on' : '')}
-              style={{ background: c }} onClick={() => update(s => { s.accent = k })} aria-label={k} />
+              style={{ background: c, color: c }} onClick={() => update(s => { s.accent = k })} aria-label={k} />
           ))}
         </div>
       </div>

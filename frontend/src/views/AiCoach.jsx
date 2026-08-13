@@ -29,6 +29,10 @@ const saveChat = m => { try { localStorage.setItem(CHAT_KEY, JSON.stringify(m.sl
 const SUGGESTIONS = [
   'Build a plan from my profile',
   'Review my current plan',
+  // The coach can now read per-muscle fatigue and retained strength out of the log, so this
+  // is answerable from data rather than from the weekly plan. It was the most obvious thing
+  // to want from a coach and the one thing it could not do.
+  'What should I train today?',
   'Make this week easier',
   'Swap an exercise I dislike',
 ]
@@ -104,9 +108,12 @@ export default function AiCoach() {
     let res = null
     update(s => { res = applyAction(s, action, opts) })
     if (!res?.ok) {
-      toast(res?.reason === 'no-routine' ? t('Routine not found')
-        : res?.unmatched?.length ? t('No matching exercises found')
-          : t('Nothing to apply'))
+      // The name comes back with the failure, so "which routine?" is answerable. Without it
+      // an invented action type and a mistyped routine name produced the same dead-end toast.
+      toast(res?.reason === 'no-routine' ? t('Routine not found') + (res.name ? ': ' + res.name : '')
+        : res?.reason === 'unknown-action' ? t('The coach asked for something this app cannot do')
+          : res?.unmatched?.length ? t('No matching exercises found')
+            : t('Nothing to apply'))
       return
     }
     setMsgs(m => m.map(x => x.id === msgId ? { ...x, applied: true } : x))
@@ -115,9 +122,15 @@ export default function AiCoach() {
     else if (res.deleted) toast(t('{0} routines deleted', res.deleted))
     else if (res.removed) toast(t('{0} exercises removed', res.removed))
     else if (res.added) toast(t('{0} exercises added', res.added))
+    else if (res.logged) toast(t('Weight logged'))
+    else if (res.goal) toast(t('Goal updated'))
+    else if (res.settings) toast(t('Settings updated'))
+    else if (res.dated) toast(t('{0} days', res.dated))
     else toast(t('Plan applied'))
-    // Land on the screen that changed — the whole point of the action was the plan.
-    setTimeout(() => nav('/plan'), 450)
+    // Land on the screen that changed. Settings and weigh-ins are not the plan, so sending
+    // those to /plan showed the user a screen where nothing had visibly happened.
+    const dest = res.logged || res.goal ? '/stats' : res.settings ? null : '/plan'
+    if (dest) setTimeout(() => nav(dest), 450)
   }
 
   const clear = () => { setMsgs([]); saveChat([]); toast(t('Chat cleared')) }
@@ -167,13 +180,19 @@ export default function AiCoach() {
           <div className="aic-b">{m.content}</div>
           {m.actions && !m.applied && <div className="aic-acts">
             {m.actions.map((a, i) => {
-              const { label, detail } = describeAction(a)
+              const { label, detail, parts, value } = describeAction(a)
               const destructive = a.action === 'delete_routines' || a.action === 'remove_exercises'
+              const ICONS = {
+                set_settings: 'gear', log_bodyweight: 'scale', set_goal: 'target',
+                plan_day: 'calendar', set_week: 'calendar',
+              }
               return <div key={i}>
                 {detail && <div className="small dim" style={{ marginBottom: 6 }}>{t(...detail)}</div>}
+                {parts?.length > 0 && <div className="small dim" style={{ marginBottom: 6 }}>{parts.map(k => t(k)).join(' · ')}</div>}
+                {value && <div className="small dim" style={{ marginBottom: 6 }} dir="ltr">{value} {S.unit}</div>}
                 <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
                   <Button size="sm" variant={destructive ? 'plain' : 'primary'} className={destructive ? 'danger' : ''}
-                    icon={destructive ? 'trash' : 'check'} onClick={() => apply(a, m.id)}>{t(label)}</Button>
+                    icon={destructive ? 'trash' : ICONS[a.action] || 'check'} onClick={() => apply(a, m.id)}>{t(label)}</Button>
                   {a.action === 'create_plan' && (S.routines || []).length > 0 &&
                     <Button size="sm" variant="ghost" className="dim" onClick={() => apply(a, m.id, { replace: true })}>{t('Replace my plan')}</Button>}
                 </div>

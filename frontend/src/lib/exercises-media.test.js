@@ -64,9 +64,11 @@ describe('exercise media configuration', () => {
   })
 
   it('keeps the packaged set small enough to install', () => {
-    // H.264 at 3x came in around 57 MB, against 65 MB for the animated WebP at 1.5x it
-    // replaced -- three times the resolution for slightly less space. If a future
-    // re-encode blows past ~90 MB the APK stops being a reasonable download.
+    // History, because the trend is the point: animated WebP at 1.5x was 65 MB; H.264 at 3x
+    // (540px) was 57 MB for three times the resolution; the current edge-directed 4x (720px
+    // animations, 540px stills) is ~80 MB, having bought the extra resolution with crf 29
+    // instead of 20. If a future re-encode blows past ~90 MB the APK stops being a
+    // reasonable download.
     let bytes = 0
     for (const sub of ['img', 'gif']) {
       const dir = path.join(PUBLIC, sub)
@@ -81,6 +83,7 @@ describe('exercise media configuration', () => {
   // at 270x270 but .exmedia paints them into a 380px-tall box, so the WebView upscaled
   // every frame on top of a 180x180 source. Encoding at or above the paint size means the
   // browser is always downscaling, which is the direction that hides interpolation.
+  // The box is 380 on a phone and 320 on the wider layout, so 380 is the number to clear.
   it('encodes the animation at least as large as the box it is painted into', () => {
     const CSS_BOX = 380   // .exmedia video height on a phone, src/index.css
     const mp4 = fs.readFileSync(path.join(PUBLIC, gifSrc(EXDB[0])))
@@ -94,6 +97,36 @@ describe('exercise media configuration', () => {
     expect(at, 'no avc1 sample entry — not an H.264 track?').toBeGreaterThan(0)
     const width = mp4.readUInt16BE(at + 28)
     const height = mp4.readUInt16BE(at + 30)
+    expect(width).toBeGreaterThanOrEqual(CSS_BOX)
+    expect(height).toBeGreaterThanOrEqual(CSS_BOX)
+  })
+
+  it('encodes the still at least as large as the box it is painted into', () => {
+    // The poster frame occupies the same .exmedia box as the video and is what you look at
+    // until the animation is toggled on, so a sharp video over a soft still just moves the
+    // problem. WebP dimensions come out of the VP8L/VP8X header.
+    const CSS_BOX = 380
+    const buf = fs.readFileSync(path.join(PUBLIC, imgSrc(EXDB[0])))
+    expect(buf.subarray(0, 4).toString(), 'not a RIFF container').toBe('RIFF')
+    expect(buf.subarray(8, 12).toString(), 'not WebP').toBe('WEBP')
+    const chunk = buf.subarray(12, 16).toString()
+    let width, height
+    if (chunk === 'VP8X') {
+      // Extended format: 24-bit canvas width-1 / height-1, little-endian, at offset 24.
+      width = 1 + (buf[24] | (buf[25] << 8) | (buf[26] << 16))
+      height = 1 + (buf[27] | (buf[28] << 8) | (buf[29] << 16))
+    } else if (chunk === 'VP8L') {
+      // Lossless: 14 bits each, packed little-endian after the 1-byte signature.
+      const bits = buf.readUInt32LE(21)
+      width = 1 + (bits & 0x3fff)
+      height = 1 + ((bits >> 14) & 0x3fff)
+    } else {
+      // Lossy VP8: 16-bit dimensions after the 3-byte start code and 'a9 01 2a' sync.
+      width = buf.readUInt16LE(26) & 0x3fff
+      height = buf.readUInt16LE(28) & 0x3fff
+    }
+    expect(Number.isFinite(width), `unparsed WebP header (${chunk})`).toBe(true)
+    expect(width).toBe(height)          // the whole set is square
     expect(width).toBeGreaterThanOrEqual(CSS_BOX)
     expect(height).toBeGreaterThanOrEqual(CSS_BOX)
   })

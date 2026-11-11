@@ -44,7 +44,15 @@ jobs:
           sudo apt-get install -y -qq ffmpeg
           pip install -q onnxruntime pillow numpy
 
+      - name: Cache converted shard ${{ matrix.shard }}
+        id: shard-cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/exmedia4
+          key: exmedia4-shard-${{ matrix.shard }}-720-crf27-q82
+
       - name: Cache raw exercise media & ONNX models
+        if: steps.shard-cache.outputs.cache-hit != 'true'
         uses: actions/cache@v4
         with:
           path: |
@@ -53,17 +61,11 @@ jobs:
           key: exmedia-raw-esrgan-v4-1
 
       - name: Fetch raw exercise media (missing files only)
+        if: steps.shard-cache.outputs.cache-hit != 'true'
         env:
           DEST: /tmp/exmedia
           JOBS: 16
         run: bash tools/fetch_gym_media.sh
-
-      - name: Cache converted shard ${{ matrix.shard }}
-        id: shard-cache
-        uses: actions/cache@v4
-        with:
-          path: /tmp/exmedia4
-          key: exmedia4-shard-${{ matrix.shard }}-720-crf27-q82
 
       - name: Upscale shard ${{ matrix.shard }}/4 with Real-ESRGAN ONNX
         if: steps.shard-cache.outputs.cache-hit != 'true'
@@ -103,7 +105,17 @@ jobs:
           java-version: 21
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          SM=$(find "$SDK_ROOT/cmdline-tools" -name sdkmanager -type f 2>/dev/null | head -n 1)
+          if [ -n "$SM" ]; then
+            yes | "$SM" --sdk_root="$SDK_ROOT" --licenses >/dev/null 2>&1 || true
+            "$SM" --sdk_root="$SDK_ROOT" "platforms;android-35" "build-tools;35.0.0"
+          else
+            ls -la "$SDK_ROOT"
+          fi
 
       - name: Download converted media shards
         uses: actions/download-artifact@v4

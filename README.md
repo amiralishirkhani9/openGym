@@ -9,7 +9,7 @@
 **A single-user, 100% offline Android workout & body-weight tracker with full Persian (RTL) support, AI-upscaled exercise media, and zero servers or accounts.**
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL--3.0-30d158?style=flat-square)](LICENSE)
-[![Android APK](https://img.shields.io/badge/Android-APK%20v4-0a84ff?style=flat-square&logo=android&logoColor=white)](https://github.com/amiralishirkhani9/openGym/releases/latest)
+[![Android APK](https://img.shields.io/badge/Android-APK%20v5-0a84ff?style=flat-square&logo=android&logoColor=white)](https://github.com/amiralishirkhani9/openGym/releases/latest)
 [![Tests](https://img.shields.io/github/actions/workflow/status/amiralishirkhani9/openGym/test.yml?branch=offline-fa&style=flat-square&label=Tests)](.github/workflows/test.yml)
 [![Release Build](https://img.shields.io/github/actions/workflow/status/amiralishirkhani9/openGym/release-apk.yml?style=flat-square&label=APK%20Build)](.github/workflows/release-apk.yml)
 
@@ -21,8 +21,9 @@
 
 > Forked from [DuarteSantos8/openGym](https://github.com/DuarteSantos8/openGym). While upstream is a self-hosted multi-user web app, this `offline-fa` fork strips away the server, accounts, and passkeys to deliver a standalone offline Android APK tailored for Persian users.
 
-## What's Changed in This Fork (v4)
+## What's Changed in This Fork (v5)
 
+- **+24 Pilates & Flat Resistance-Band Exercises (`9001`–`9024`):** Added 24 home-friendly Pilates band movements (pull-aparts, face pulls, seated rows, archer rows, chest flyes, banded push-ups, roll-ups, teasers, the hundred, clamshells, donkey kicks, monster walks, hamstring stretch, spine twist, and more) with Persian names, offline Persian step-by-step instructions, smart bodyweight/timed defaults, and crisp 720×720 generated diagrams & MP4 animations (`tools/generate_pilates_media.py`) — bringing the offline catalogue to **1,348 exercises**.
 - **100% Offline & Account-Free:** No backend, no passkeys, no network calls required. All workout logs, routines, and weigh-ins stay locally on your device (`localStorage` + Capacitor `Filesystem` mirror) with one-tap JSON backup/restore.
 - **AI-Upscaled 720px Exercise Media (`tools/convert_gym_media_v4.py`):** All 1,324 animations (`gif/*.mp4`) and stills (`img/*.webp`) are bundled inside the APK and neural-upscaled from 180×180 to **720×720** using Real-ESRGAN ONNX (`realesrgan_anime6b` for stills, `realesr-general-x4v3` for clips), plus fullscreen tap-to-zoom and dark-mode contrast tuning.
 - **Full Persian (RTL) Localization:**

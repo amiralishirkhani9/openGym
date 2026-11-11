@@ -124,26 +124,30 @@ jobs:
           path: /tmp/merged-media
           merge-multiple: true
 
-      - name: Place media into frontend/public
+      - name: Place media into frontend/public & generate Pilates band media
         run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          pip install -q pillow
           mkdir -p frontend/public/gif frontend/public/img
           cp -r /tmp/merged-media/gif/* frontend/public/gif/
           cp -r /tmp/merged-media/img/* frontend/public/img/
+          python3 tools/generate_pilates_media.py --out frontend/public --jobs 4
           echo "gif count: $(ls frontend/public/gif | wc -l)"
           echo "img count: $(ls frontend/public/img | wc -l)"
           du -sh frontend/public/gif frontend/public/img
 
       - name: Validate media integrity (ffprobe + full decode)
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg
           python3 - << 'PY'
-          import subprocess, sys
+          import json, subprocess, sys
           from pathlib import Path
           from concurrent.futures import ThreadPoolExecutor
+          ex_raw = Path('frontend/src/lib/exercises-data.js').read_text(encoding='utf-8').strip()
+          ex_cnt = len(json.loads(ex_raw[ex_raw.index('['):ex_raw.rindex(']') + 1]))
           d = Path('frontend/public')
           files = sorted((d / 'gif').glob('*.mp4')) + sorted((d / 'img').glob('*.webp'))
-          assert len(files) == 2648, f'Expected 2648 media files, got {len(files)}'
+          assert len(files) == 2 * ex_cnt, f'Expected {2 * ex_cnt} media files, got {len(files)}'
           def chk(f):
               p = subprocess.run(['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=p=0', str(f)], capture_output=True)
               w, h = map(int, p.stdout.decode().strip().rstrip(',').split(',')[:2])
@@ -234,25 +238,15 @@ jobs:
             TITLE="openGym ${VER} — فارسی کامل، ارتقای کیفیت AI و تجربهٔ اندروید"
           fi
           NOTES=$(cat << 'EOF'
-          ### تازه‌های نسخهٔ ۴ (Release 4)
+          ### تازه‌های نسخهٔ ۵ (Release 5)
 
-          - **ارتقای هوشمند کیفیت تصاویر حرکات (720px AI Super-Resolution):** بازسازی تمام ۱۳۲۴ انیمیشن و تصویر ایستا با مدل‌های Real-ESRGAN (حذف حالت شطرنجی/موج‌دار نسخه‌های قبل، همراه با نمایشگر تمام‌صفحه لمسی و تنظیم نور در تم تاریک).
-          - **فارسی‌سازی کامل و بومی (۱۰۰٪ آفلاین):**
-            - ترجمه نام تمام **۱۳۲۴ حرکت** به فارسی اصطلاحی باشگاه همراه با زیرنویس انگلیسی و جستجوی هم‌زمان فارسی و انگلیسی.
-            - افزودن پک آفلاین آموزش مرحله‌به‌مرحله فارسی برای هر **۱۳۲۴ حرکت** (`instr/fa.js`) بدون نیاز به اینترنت و API.
-            - ترجمه بیش از ۱۴۰ کلید جامانده (بخش‌های بدن، تجهیزات، نام عضلات نقشه بدن، روزها، ماه‌ها، قوانین پیشرفت و جدول RIR/RPE).
-            - پشتیبانی از **تقویم شمسی** (در نوار خانه، نمودارها و تقویم ماهانه) با قابلیت جابه‌جایی بین شمسی و میلادی در تنظیمات.
-          - **ست و وزن هوشمند متناسب با هر حرکت:**
-            - حرکات کششی و موبیلیتی به‌صورت پیش‌فرض روی حالت **۱ نوبت زمانی (۳۰ ثانیه)** بدون نیاز به ثبت وزن باز می‌شوند.
-            - حرکات ایزومتریک (مثل پلانک و L-sit) به‌صورت خودکار روی **تایمر ثانیه‌شمار** تنظیم می‌شوند.
-            - تجهیزات بدون وزنه (وزن بدن، کش، فوم رولر، طناب، جیم‌بال، چرخ شکم) ستون وزن را مخفی می‌کنند؛ با امکان افزودن وزنه اضافه یا تنظیم سریع حالت حرکت حین تمرین.
-            - حرکات کاردیو و کمکی (`assisted`) متناسب‌سازی شدند (بدون فیلد سرعت برای طناب/برپی، امکان تغییر حالت به تکرار/زمان).
-          - **بهینه‌سازی رابط کاربری و اندروید:**
-            - پشتیبانی از دکمهٔ سخت‌افزاری **Back اندروید** (بستن پنجره‌های باز، بازگشت بین صفحات).
-            - نوار دسترسی سریع بین حرکات حین تمرین، دکمهٔ سریع تایمر استراحت، دکمه‌های لمسی درشت‌تر برای باشگاه، و دکمهٔ پاک‌کردن سریع جستجو.
-            - رفع باگ جهت سوییچ‌ها در RTL، فلش‌های برگشت/بعدی، کرش صفحه تنظیمات/چاپ در حالت وب، و باگ خواندن تاریخچهٔ تمرین توسط مربی هوشمند.
+          - **۲۴ حرکت جدید تخصصی با کش پیلاتس و کش مقاومتی معمولی (۹۰۰۱ تا ۹۰۲۴):**
+            - شامل حرکات کامل بالاتنه، شکم/پیلاتس، پایین‌تنه و کشش/موبیلیتی قابل اجرا در خانه با یک **کش پیلاتس ساده بدون نیاز به میله یا پایه** (مانند پول‌آپارت، فیس‌پول، قایقی نشسته دور پا، کشش کمان، قفسه سینه، شنا سوئدی مقاومتی، جلوبازو/پشت‌بازو، رول‌آپ، تیزر، هاندرد، صدف، کیک‌بک باسن، قدم‌زدن به پهلو، کشش همسترینگ و چرخش ستون فقرات).
+            - دارای **نام فارسی، زیرنویس انگلیسی، آموزش مرحله‌به‌مرحلهٔ فارسی آفلاین، منطق ست/وزن هوشمند (بدون فیلد وزن مزاحم و تایمر خودکار برای حرکات کششی/هاندرد)** و **۲۴ تصویر و انیمیشن ۷۲۰×۷۲۰ اختصاصی با نمایش کش سبز رنگ** (`tools/generate_pilates_media.py`).
+            - یکپارچه در دسته‌بندی **«کش مقاومتی / پیلاتس»** در کتابخانهٔ حرکات.
+          - **به‌همراه تمام بهبودهای نسخهٔ ۴:** ارتقای کیفیت ۱٬۳۲۴ حرکت قبلی با Real-ESRGAN ONNX، فارسی‌سازی کامل، تقویم شمسی، دکمهٔ Back اندروید و ست/وزن هوشمند.
 
-          > **نکتهٔ نصب:** به‌دلیل به‌روزرسانی کلید امضای بیلد خودکار GitHub Actions، اگر نسخهٔ قبلی روی گوشی نصب است، ابتدا یک بک‌آپ JSON از تنظیمات بگیرید، نسخهٔ قبلی را حذف کنید و سپس این APK را نصب و بک‌آپ را وارد کنید.
+          > **نکتهٔ نصب:** اگر از نسخهٔ ۴ ارتقا می‌دهید، APK نسخهٔ ۵ مستقیماً روی نسخهٔ ۴ نصب می‌شود (با همان کلید امضای جدید CI). اگر نسخهٔ ۳ یا قدیمی‌تر نصب دارید، ابتدا بکاپ JSON بگیرید، نسخهٔ قدیمی را حذف کنید و سپس نصب نمایید.
           EOF
           )
           gh release delete "$TAG" --yes 2>/dev/null || true

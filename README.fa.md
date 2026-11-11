@@ -9,9 +9,9 @@
 **ردیاب تمرینات ورزشی و وزن بدن روی اندروید — بدون حساب کاربری، بدون سرور، بدون نیاز به اینترنت و کاملاً فارسی (RTL).**
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL--3.0-30d158?style=flat-square)](LICENSE)
-[![Android APK](https://img.shields.io/badge/Android-APK%20v4-0a84ff?style=flat-square&logo=android&logoColor=white)](https://github.com/amiralishirkhani9/openGym/releases/latest)
+[![Android APK](https://img.shields.io/badge/Android-APK%20v5-0a84ff?style=flat-square&logo=android&logoColor=white)](https://github.com/amiralishirkhani9/openGym/releases/latest)
 [![Offline](https://img.shields.io/badge/Offline-100%25%20Local-ff9f0a?style=flat-square)](README.fa.md)
-[![Exercises](https://img.shields.io/badge/Exercises-1%2C324%20AI--Upscaled-bf5af2?style=flat-square)](tools/convert_gym_media_v4.py)
+[![Exercises](https://img.shields.io/badge/Exercises-1%2C348%20(1324%20AI%20%2B%2024%20Pilates%20Band)-bf5af2?style=flat-square)](tools/convert_gym_media_v4.py)
 [![Tests](https://img.shields.io/github/actions/workflow/status/amiralishirkhani9/openGym/test.yml?branch=offline-fa&style=flat-square&label=Tests)](.github/workflows/test.yml)
 
 [دانلود آخرین APK](https://github.com/amiralishirkhani9/openGym/releases/latest) · [English Overview (README.md)](README.md)

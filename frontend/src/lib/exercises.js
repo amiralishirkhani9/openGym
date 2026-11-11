@@ -92,7 +92,7 @@ export const isStretch = idOrEx => {
 }
 export const isTimedHold = idOrEx => {
   const ex = resolveEx(idOrEx)
-  return !!ex && /\b(plank|wall sit|l-sit|v-sit|dead hang|hollow|isometric)\b/i.test(ex.n || '')
+  return !!ex && /\b(plank|wall sit|l-sit|v-sit|dead hang|hollow|isometric|hundred)\b/i.test(ex.n || '')
 }
 export const isMachineCardio = idOrEx => {
   const ex = resolveEx(idOrEx)

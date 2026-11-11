@@ -699,7 +699,7 @@ export default {
   "reached!": "رسیدی! 🎉",
   "rear deltoids": "سرشانه خلفی",
   "rescheduled": "جابجا شده",
-  "resistance band": "کش مقاومتی",
+  "resistance band": "کش مقاومتی / پیلاتس",
   "rest day, but no one’s stopping you": "روز استراحت، ولی کسی جلوت را نگرفته",
   "rhomboids": "متوازی‌الاضلاع (بین کتف)",
   "roller": "فوم رولر",

@@ -29,7 +29,7 @@ if [ ! -s "$GIFLIST" ] || [ ! -s "$IMGLIST" ]; then
 import json, sys
 from pathlib import Path
 src = Path(sys.argv[1]).read_text(encoding='utf-8').strip()
-data = json.loads(src[src.index('['):src.rindex(']') + 1])
+data = [e for e in json.loads(src[src.index('['):src.rindex(']') + 1]) if not str(e.get('id', '')).startswith('90')]
 Path(sys.argv[2]).write_text('\n'.join(e['gif'] for e in data) + '\n')
 Path(sys.argv[3]).write_text('\n'.join(e['img'] for e in data) + '\n')
 PY

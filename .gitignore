@@ -26,3 +26,6 @@ frontend/android/keystore.properties
 # APK on the Releases page already contains it.
 frontend/public/gif/
 frontend/public/img/
+
+__pycache__/
+*.pyc

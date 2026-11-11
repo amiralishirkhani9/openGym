@@ -1,0 +1,247 @@
+name: Build & Release Android APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: 'Publish GitHub Release with signed APK'
+        type: boolean
+        default: true
+      release_title:
+        description: 'Optional custom release title'
+        type: string
+        default: ''
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-apk-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  media:
+    name: AI Upscale Media (shard ${{ matrix.shard }}/4)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install media tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          pip install -q onnxruntime pillow numpy
+
+      - name: Cache raw exercise media & ONNX models
+        uses: actions/cache@v4
+        with:
+          path: |
+            /tmp/exmedia
+            /tmp/esrgan-models
+          key: exmedia-raw-esrgan-v4-1
+
+      - name: Fetch raw exercise media (missing files only)
+        env:
+          DEST: /tmp/exmedia
+          JOBS: 16
+        run: bash tools/fetch_gym_media.sh
+
+      - name: Cache converted shard ${{ matrix.shard }}
+        id: shard-cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/exmedia4
+          key: exmedia4-shard-${{ matrix.shard }}-720-crf27-q82
+
+      - name: Upscale shard ${{ matrix.shard }}/4 with Real-ESRGAN ONNX
+        if: steps.shard-cache.outputs.cache-hit != 'true'
+        env:
+          SRC: /tmp/exmedia
+          OUT: /tmp/exmedia4
+          MODEL_DIR: /tmp/esrgan-models
+          CRF: '27'
+          IMG_Q: '82'
+        run: python3 tools/convert_gym_media_v4.py --shard ${{ matrix.shard }}/4 --jobs 4
+
+      - name: Upload media shard ${{ matrix.shard }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: media-shard-${{ matrix.shard }}
+          path: /tmp/exmedia4
+          retention-days: 1
+
+  build-apk:
+    name: Test, Bundle & Build APK
+    needs: media
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Download converted media shards
+        uses: actions/download-artifact@v4
+        with:
+          pattern: media-shard-*
+          path: /tmp/merged-media
+          merge-multiple: true
+
+      - name: Place media into frontend/public
+        run: |
+          mkdir -p frontend/public/gif frontend/public/img
+          cp -r /tmp/merged-media/gif/* frontend/public/gif/
+          cp -r /tmp/merged-media/img/* frontend/public/img/
+          echo "gif count: $(ls frontend/public/gif | wc -l)"
+          echo "img count: $(ls frontend/public/img | wc -l)"
+          du -sh frontend/public/gif frontend/public/img
+
+      - name: Validate media integrity (ffprobe + full decode)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          python3 - << 'PY'
+          import subprocess, sys
+          from pathlib import Path
+          from concurrent.futures import ThreadPoolExecutor
+          d = Path('frontend/public')
+          files = sorted((d / 'gif').glob('*.mp4')) + sorted((d / 'img').glob('*.webp'))
+          assert len(files) == 2648, f'Expected 2648 media files, got {len(files)}'
+          def chk(f):
+              p = subprocess.run(['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=p=0', str(f)], capture_output=True)
+              w, h = map(int, p.stdout.decode().strip().rstrip(',').split(',')[:2])
+              if w < 720 or h < 720:
+                  return f'{f.name}: {w}x{h} < 720'
+              dec = subprocess.run(['ffmpeg', '-v', 'error', '-i', str(f), '-f', 'null', '-'], capture_output=True)
+              if dec.returncode != 0:
+                  return f'{f.name}: decode failed'
+              return None
+          with ThreadPoolExecutor(max_workers=8) as pool:
+              errs = [e for e in pool.map(chk, files) if e]
+          if errs:
+              print('\n'.join(errs[:20]), file=sys.stderr)
+              sys.exit(1)
+          print(f'Verified {len(files)} media files >= 720px and cleanly decodable.')
+          PY
+
+      - name: Install dependencies & run full test suite (including media tests)
+        working-directory: frontend
+        run: |
+          npm ci
+          npm test
+          node scripts/check-locales.mjs
+
+      - name: Build mobile web bundle & sync Capacitor Android
+        working-directory: frontend
+        run: |
+          VITE_MOBILE=1 npx vite build
+          npx cap sync android
+
+      - name: Configure release signing keystore
+        env:
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$ANDROID_KEYSTORE_B64" ]; then
+            echo "$ANDROID_KEYSTORE_B64" | base64 -d > /tmp/release.p12
+            cat > frontend/android/keystore.properties << EOF
+          storeFile=/tmp/release.p12
+          storePassword=$ANDROID_KEYSTORE_PASSWORD
+          keyAlias=$ANDROID_KEY_ALIAS
+          keyPassword=$ANDROID_KEY_PASSWORD
+          EOF
+            echo "Release keystore configured."
+          else
+            echo "::error::ANDROID_KEYSTORE_B64 secret is missing!"
+            exit 1
+          fi
+
+      - name: Build signed Release APK
+        working-directory: frontend/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+
+      - name: Package APK & read version
+        id: pkg
+        run: |
+          VER=$(grep -E 'versionName\s+"' frontend/android/app/build.gradle | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
+          APK_SRC="frontend/android/app/build/outputs/apk/release/app-release.apk"
+          APK_OUT="openGym-${VER}-fa.apk"
+          cp "$APK_SRC" "$APK_OUT"
+          ls -lh "$APK_OUT"
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          echo "apk=$APK_OUT" >> "$GITHUB_OUTPUT"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openGym-${{ steps.pkg.outputs.version }}-fa-apk
+          path: ${{ steps.pkg.outputs.apk }}
+
+      - name: Publish GitHub Release
+        if: ${{ inputs.publish_release == true || startsWith(github.ref, 'refs/tags/') }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VER="${{ steps.pkg.outputs.version }}"
+          APK="${{ steps.pkg.outputs.apk }}"
+          TAG="${GITHUB_REF_NAME}"
+          if [[ "$GITHUB_REF" != refs/tags/* ]]; then
+            TAG="$VER"
+          fi
+          TITLE="${{ inputs.release_title }}"
+          if [ -z "$TITLE" ]; then
+            TITLE="openGym ${VER} — فارسی کامل، ارتقای کیفیت AI و تجربهٔ اندروید"
+          fi
+          NOTES=$(cat << 'EOF'
+          ### تازه‌های نسخهٔ ۴ (Release 4)
+
+          - **ارتقای هوشمند کیفیت تصاویر حرکات (720px AI Super-Resolution):** بازسازی تمام ۱۳۲۴ انیمیشن و تصویر ایستا با مدل‌های Real-ESRGAN (حذف حالت شطرنجی/موج‌دار نسخه‌های قبل، همراه با نمایشگر تمام‌صفحه لمسی و تنظیم نور در تم تاریک).
+          - **فارسی‌سازی کامل و بومی (۱۰۰٪ آفلاین):**
+            - ترجمه نام تمام **۱۳۲۴ حرکت** به فارسی اصطلاحی باشگاه همراه با زیرنویس انگلیسی و جستجوی هم‌زمان فارسی و انگلیسی.
+            - افزودن پک آفلاین آموزش مرحله‌به‌مرحله فارسی برای هر **۱۳۲۴ حرکت** (`instr/fa.js`) بدون نیاز به اینترنت و API.
+            - ترجمه بیش از ۱۴۰ کلید جامانده (بخش‌های بدن، تجهیزات، نام عضلات نقشه بدن، روزها، ماه‌ها، قوانین پیشرفت و جدول RIR/RPE).
+            - پشتیبانی از **تقویم شمسی** (در نوار خانه، نمودارها و تقویم ماهانه) با قابلیت جابه‌جایی بین شمسی و میلادی در تنظیمات.
+          - **ست و وزن هوشمند متناسب با هر حرکت:**
+            - حرکات کششی و موبیلیتی به‌صورت پیش‌فرض روی حالت **۱ نوبت زمانی (۳۰ ثانیه)** بدون نیاز به ثبت وزن باز می‌شوند.
+            - حرکات ایزومتریک (مثل پلانک و L-sit) به‌صورت خودکار روی **تایمر ثانیه‌شمار** تنظیم می‌شوند.
+            - تجهیزات بدون وزنه (وزن بدن، کش، فوم رولر، طناب، جیم‌بال، چرخ شکم) ستون وزن را مخفی می‌کنند؛ با امکان افزودن وزنه اضافه یا تنظیم سریع حالت حرکت حین تمرین.
+            - حرکات کاردیو و کمکی (`assisted`) متناسب‌سازی شدند (بدون فیلد سرعت برای طناب/برپی، امکان تغییر حالت به تکرار/زمان).
+          - **بهینه‌سازی رابط کاربری و اندروید:**
+            - پشتیبانی از دکمهٔ سخت‌افزاری **Back اندروید** (بستن پنجره‌های باز، بازگشت بین صفحات).
+            - نوار دسترسی سریع بین حرکات حین تمرین، دکمهٔ سریع تایمر استراحت، دکمه‌های لمسی درشت‌تر برای باشگاه، و دکمهٔ پاک‌کردن سریع جستجو.
+            - رفع باگ جهت سوییچ‌ها در RTL، فلش‌های برگشت/بعدی، کرش صفحه تنظیمات/چاپ در حالت وب، و باگ خواندن تاریخچهٔ تمرین توسط مربی هوشمند.
+
+          > **نکتهٔ نصب:** به‌دلیل به‌روزرسانی کلید امضای بیلد خودکار GitHub Actions، اگر نسخهٔ قبلی روی گوشی نصب است، ابتدا یک بک‌آپ JSON از تنظیمات بگیرید، نسخهٔ قبلی را حذف کنید و سپس این APK را نصب و بک‌آپ را وارد کنید.
+          EOF
+          )
+          gh release delete "$TAG" --yes 2>/dev/null || true
+          gh release create "$TAG" "$APK" --title "$TITLE" --notes "$NOTES" --target "${GITHUB_SHA}"

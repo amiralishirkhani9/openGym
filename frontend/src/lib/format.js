@@ -16,9 +16,18 @@ export function fmtDate(iso, long) {
   const d = new Date(iso + 'T12:00:00')
   return d.toLocaleDateString(dateLocale(), long ? { weekday: 'short', day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short' })
 }
+export function fmtDayNum(d) {
+  try { return d.toLocaleDateString(dateLocale(), { day: 'numeric' }) } catch { return String(d.getDate()) }
+}
+export function fmtMonthShort(d) {
+  try { return d.toLocaleDateString(dateLocale(), { month: 'short' }) } catch { return t(MONTHS[d.getMonth()]) }
+}
+export function fmtMonthYear(d) {
+  try { return d.toLocaleDateString(dateLocale(), { month: 'long', year: 'numeric' }) } catch { return `${t(MONTHS_LONG[d.getMonth()])} ${d.getFullYear()}` }
+}
 export function fmtDur(ms) {
   const m = Math.floor(ms / 60000)
-  return m >= 60 ? Math.floor(m / 60) + 'h ' + (m % 60) + 'm' : m + ' min'
+  return m >= 60 ? t('{0}h {1}m', Math.floor(m / 60), m % 60) : t('{0} min', m)
 }
 // Imported history has no clock — an unknown duration is left out rather than shown as "0 min".
 export const durPart = ms => (ms >= 60000 ? [fmtDur(ms)] : [])

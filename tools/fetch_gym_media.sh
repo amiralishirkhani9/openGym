@@ -21,6 +21,21 @@ IMGLIST="${IMGLIST:-/tmp/imglist.txt}"
 
 mkdir -p "$DEST/gif" "$DEST/img"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+EXDATA="$SCRIPT_DIR/../frontend/src/lib/exercises-data.js"
+if [ ! -s "$GIFLIST" ] || [ ! -s "$IMGLIST" ]; then
+  if [ -f "$EXDATA" ]; then
+    python3 - "$EXDATA" "$GIFLIST" "$IMGLIST" << 'PY'
+import json, sys
+from pathlib import Path
+src = Path(sys.argv[1]).read_text(encoding='utf-8').strip()
+data = json.loads(src[src.index('['):src.rindex(']') + 1])
+Path(sys.argv[2]).write_text('\n'.join(e['gif'] for e in data) + '\n')
+Path(sys.argv[3]).write_text('\n'.join(e['img'] for e in data) + '\n')
+PY
+  fi
+fi
+
 # One file: skip when it already looks complete, else fetch with a retry.
 # A GIF under 1 KB is a truncated or error body, never a real animation.
 fetch() {

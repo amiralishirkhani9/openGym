@@ -263,6 +263,27 @@ describe('defaultConfig', () => {
     expect(defaultConfig(BW, 'time')).toEqual({ sets: 3, sec: 45, weight: 0, mode: 'time', bodyweight: true })
     expect('bodyweight' in defaultConfig(LIFT)).toBe(false)
   })
+  it('defaults stretches and planks to timed mode, and bands/rollers to no-weight', () => {
+    const stretch = EXDB.find(e => /\bstretch\b/i.test(e.n))
+    const plank = EXDB.find(e => /\bplank\b/i.test(e.n) && e.eq === 'body weight')
+    const band = EXDB.find(e => e.eq === 'band' && !/\bstretch\b/i.test(e.n))
+    if (stretch) {
+      const c = defaultConfig(stretch.id)
+      expect(c.mode).toBe('time')
+      expect(c.sets).toBe(1)
+      expect(c.sec).toBe(30)
+    }
+    if (plank) {
+      const c = defaultConfig(plank.id)
+      expect(c.mode).toBe('time')
+      expect(c.sets).toBe(3)
+      expect(c.sec).toBe(45)
+      expect(c.bodyweight).toBe(true)
+    }
+    if (band) {
+      expect(defaultConfig(band.id).bodyweight).toBe(true)
+    }
+  })
 })
 
 /* ---------- bodyweight and per side (issues #31/#32/#33) ---------- */

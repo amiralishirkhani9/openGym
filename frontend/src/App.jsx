@@ -1,10 +1,11 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { HashRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { useStore, DEF } from './store/useStore.js'
 import { useUI } from './store/useUI.js'
 import { bindUI } from './components/ui.jsx'
 import { ACCENTS } from './lib/format.js'
-import { setLang, useLang, isRTL } from './lib/i18n.js'
+import { setLang, setCal, useLang, isRTL } from './lib/i18n.js'
+import { MOBILE } from './lib/mobile.js'
 import { setNav } from './lib/nav.js'
 import { useWakeLock } from './lib/wakelock.js'
 import { startFlow } from './sheets.jsx'
@@ -42,6 +43,31 @@ function Shell() {
   useEffect(() => { setNav(navigate) }, [navigate])
   useEffect(() => { applyPrefs(S.theme, S.accent) }, [S.theme, S.accent])
   useEffect(() => { setLang(S.lang || DEF.lang) }, [S.lang])
+  useEffect(() => { setCal(S.cal || DEF.cal) }, [S.cal])
+  const pathRef = useRef(loc.pathname)
+  pathRef.current = loc.pathname
+  useEffect(() => {
+    if (!MOBILE) return
+    let handle = null
+    let disposed = false
+    import('@capacitor/app').then(({ App }) => App.addListener('backButton', () => {
+      const ui = useUI.getState()
+      if (ui.sheets.length) {
+        const top = ui.sheets[ui.sheets.length - 1]
+        if (!top.locked) ui.closeSheet(top.id)
+        return
+      }
+      if (pathRef.current !== '/home' && pathRef.current !== '/') {
+        navigate(-1)
+        return
+      }
+      App.exitApp()
+    })).then(h => {
+      if (disposed) h.remove()
+      else handle = h
+    }).catch(() => {})
+    return () => { disposed = true; handle?.remove() }
+  }, [navigate])
   useEffect(() => {
     const de = document.documentElement
     const l = S.lang || DEF.lang

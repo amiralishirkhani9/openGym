@@ -57,8 +57,8 @@ export default function Settings() {
 
   return <div className="narrow">
     <div className="hdr">
-      <button className="iconbtn" onClick={() => nav('/home')} aria-label={t('Home')}><Icon name="chevronLeft" /></button>
-      <div style={{ flex: 1, marginLeft: 10 }}><h1>{t('Settings')}</h1></div>
+      <button className="iconbtn rtl-flip" onClick={() => nav('/home')} aria-label={t('Home')}><Icon name="chevronLeft" /></button>
+      <div style={{ flex: 1, marginInlineStart: 10 }}><h1>{t('Settings')}</h1></div>
     </div>
 
     {/* ---------- your data (SINGLE-USER BUILD: no accounts, nothing to sign in to) ---------- */}
@@ -84,6 +84,14 @@ export default function Settings() {
           options={[{ value: 'kg', label: 'kg' }, { value: 'lb', label: 'lb' }]}
           value={S.unit} onChange={v => update(s => { s.unit = v })} />
       </Row>
+      {(S.lang || DEF.lang) === 'fa' && (
+        <Row icon="calendar" iconTint="var(--orange)" title={t('Calendar')}>
+          <Segmented className="seg-inline"
+            options={[{ value: 'jalali', label: t('Jalali') }, { value: 'gregory', label: t('Gregorian') }]}
+            value={S.cal === 'gregory' ? 'gregory' : 'jalali'}
+            onChange={v => update(s => { s.cal = v })} />
+        </Row>
+      )}
     </Section>
 
     {/* ---------- ai coach ---------- */}
@@ -185,12 +193,12 @@ export default function Settings() {
     {!MOBILE && <Section title={t('Tip')}>
       <Row icon="lightbulb" iconTint="var(--yellow)"
         title={IS_ANDROID ? t('In Chrome: ⋮ menu → Add to Home screen') : t('In Safari: Share → Add to Home Screen')}
-        subtitle={t('to install openGym as a full-screen app.') + ' ' + (user ? t('Your data syncs with your profile — sign in anywhere to see it.') : t('Guest data stays on this device — export a backup now and then!'))} />
+        subtitle={t('to install openGym as a full-screen app.') + ' ' + t('Guest data stays on this device — export a backup now and then!')} />
     </Section>}
 
     <div className="dim small" style={{ textAlign: 'center', marginTop: 4, lineHeight: 1.6 }}>
       openGym · {t('free & open source (AGPL v3)')}<br />
-      <a href="https://github.com/DuarteSantos8/openGym" target="_blank" rel="noopener">source code</a> · exercise data: hasaneyldrm/exercises-dataset (CC)
+      <a href="https://github.com/amiralishirkhani9/openGym" target="_blank" rel="noopener">source code</a> · exercise data: hasaneyldrm/exercises-dataset (CC)
     </div>
   </div>
 }

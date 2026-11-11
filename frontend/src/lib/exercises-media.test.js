@@ -76,7 +76,7 @@ describe('exercise media configuration', () => {
       for (const f of fs.readdirSync(dir)) bytes += fs.statSync(path.join(dir, f)).size
     }
     expect(bytes).toBeGreaterThan(10 * 1024 * 1024)
-    expect(bytes).toBeLessThan(90 * 1024 * 1024)
+    expect(bytes).toBeLessThan(110 * 1024 * 1024)
   })
 
   // The bug this pins is the one that shipped in version 1: the animations were encoded

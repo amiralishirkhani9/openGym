@@ -75,14 +75,31 @@ export const imgSrc = ex => IMG_BASE + swap(ex.img, '.webp')
 export const gifSrc = ex => GIF_BASE + swap(ex.gif, '.mp4')
 
 // Cardio exercises log time + speed instead of weight × reps.
-export const isCardio = idOrEx => (typeof idOrEx === 'string' ? EXIDX[idOrEx] : idOrEx)?.bp === 'cardio'
+const resolveEx = idOrEx => (typeof idOrEx === 'string' ? EXIDX[idOrEx] : idOrEx)
+export const isCardio = idOrEx => resolveEx(idOrEx)?.bp === 'cardio'
 
-// Exercises the dataset already knows carry no external load (issue #32) — a quarter of the
-// catalogue. This seeds the `bw` flag on a fresh config so a push-up never asks for a weight
-// nobody was going to enter. It is only the default: the flag lives on the config, so a dip
-// done with a belt can turn it off and a custom exercise can turn it on.
-export const isBodyweightEq = idOrEx =>
-  (typeof idOrEx === 'string' ? EXIDX[idOrEx] : idOrEx)?.eq === 'body weight'
+// Exercises the dataset already knows carry no external load (bodyweight, bands, rollers,
+// ropes, stability/bosu balls). Seeds `bodyweight: true` on a fresh config so push-ups,
+// band pull-aparts, foam rolling and stretches never ask for a weight unless the user adds one.
+const NO_WEIGHT_EQ = new Set([
+  'body weight', 'band', 'resistance band', 'roller', 'wheel roller', 'rope', 'stability ball', 'bosu ball'
+])
+export const isBodyweightEq = idOrEx => NO_WEIGHT_EQ.has(resolveEx(idOrEx)?.eq)
+export const isAssistedEq = idOrEx => resolveEx(idOrEx)?.eq === 'assisted'
+export const isStretch = idOrEx => {
+  const ex = resolveEx(idOrEx)
+  return !!ex && (ex.eq === 'roller' || /\b(stretch(es|ing)?|mobility|yoga|pose)\b/i.test(ex.n || ''))
+}
+export const isTimedHold = idOrEx => {
+  const ex = resolveEx(idOrEx)
+  return !!ex && /\b(plank|wall sit|l-sit|v-sit|dead hang|hollow|isometric)\b/i.test(ex.n || '')
+}
+export const isMachineCardio = idOrEx => {
+  const ex = resolveEx(idOrEx)
+  if (!ex) return false
+  return ['elliptical machine', 'stationary bike', 'stepmill machine', 'skierg machine', 'upper body ergometer'].includes(ex.eq) ||
+    /\b(treadmill|run|bike|elliptical|stepmill|cycle)\b/i.test(ex.n || '')
+}
 
 // An id that resolves to nothing — a plan file built against a different exercise dataset,
 // a custom exercise deleted on another device before the sync arrived — still has to

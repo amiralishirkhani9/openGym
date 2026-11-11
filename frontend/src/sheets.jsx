@@ -1,16 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import { useStore } from './store/useStore.js'
 import { useUI } from './store/useUI.js'
-import { EXDB, EXIDX, BODYPARTS, isCardio, isBodyweightEq, allExercises, equipmentOf } from './lib/exercises.js'
-import { fmtDate, fmtNum, fmtVol, fmtDur, durPart, todayISO, uid, exCount, DAYN, MONTHS_LONG, ACCENTS } from './lib/format.js'
+import { EXDB, EXIDX, BODYPARTS, isCardio, isBodyweightEq, isAssistedEq, isStretch, isMachineCardio, allExercises, equipmentOf } from './lib/exercises.js'
+import { fmtDate, fmtNum, fmtVol, fmtDur, fmtMonthYear, durPart, todayISO, isoOf, uid, exCount, DAYN, MONTHS_LONG, ACCENTS } from './lib/format.js'
 import { lastEntryFor, bestWeightFor, buildSets, effectiveRoutineId, workoutVolume, setsDone, setsDoneActive, lastBW, supersetUnits, unitOf, setLabel, defaultConfig, cleanupSg, modeOf, effortOf, isBw, isPerSide, sideReps, workSetsDone } from './lib/history.js'
 import { beep, vibrate } from './lib/sound.js'
-import { t, instrFor, getLang, INSTR_LANGS } from './lib/i18n.js'
+import { t, exName, exOrigName, instrFor, getLang, getCal, INSTR_LANGS } from './lib/i18n.js'
 import { nav } from './lib/nav.js'
 import Media, { Thumb } from './components/Media.jsx'
 import Stepper from './components/Stepper.jsx'
 import Icon from './components/Icon.jsx'
-import { Button, Slider, Switch, Segmented, SelectRow, Row } from './components/ui.jsx'
+import { Button, Slider, Switch, Segmented, SelectRow, Row, SearchField } from './components/ui.jsx'
 import { glyphOf, GLYPH_GROUPS, DEFAULT_GLYPH } from './lib/glyphs.js'
 import BodyMap from './components/BodyMap.jsx'
 import { loadOfWorkouts } from './lib/muscles.js'
@@ -150,7 +150,7 @@ function ImportSummary({ parsed, close }) {
       {parsed.from === parsed.to ? fmtDate(parsed.from, true) : fmtDate(parsed.from, true) + ' – ' + fmtDate(parsed.to, true)}
     </div>
 
-    <div className="tiles" style={{ textAlign: 'left' }}>
+    <div className="tiles" style={{ textAlign: 'start' }}>
       {isBW ? <>
         <div className="tile"><div className="l">{t('Weigh-ins')}</div><div className="v" style={{ fontSize: '1.1rem' }}>{parsed.bodyweight.length}</div></div>
         <div className="tile"><div className="l">{t('New')}</div><div className="v" style={{ fontSize: '1.1rem' }}>{fresh}</div></div>
@@ -276,8 +276,10 @@ function ExerciseDetail({ ex, close }) {
   const st = useStore(s => s.S)
   const last = lastEntryFor(st, ex.id)
   const best = bestWeightFor(st, ex.id)
+  const sub = exOrigName(ex)
   return <>
-    <h3 className="capitalize">{ex.n}</h3>
+    <h3 className="capitalize" style={{ marginBottom: sub ? 4 : 14 }}>{exName(ex)}</h3>
+    {sub && <div className="dim small capitalize" dir="ltr" style={{ marginBottom: 12, textAlign: 'start' }}>{sub}</div>}
     <Media ex={ex} />
     <div className="row" style={{ gap: 6, flexWrap: 'wrap', margin: '10px 0' }}>
       <span className="tag acc">{t(ex.bp)}</span>
@@ -286,7 +288,7 @@ function ExerciseDetail({ ex, close }) {
       {(ex.sm || []).slice(0, 3).map((s, i) => <span key={i} className="tag">{t(s)}</span>)}
     </div>
     {ex.desc && <div className="exnote">{ex.desc}</div>}
-    {best > 0 && <div className="small row" style={{ marginBottom: 6, gap: 5 }}><Icon name="trophy" style={{ fontSize: 14, color: 'var(--yellow)' }} />{t('Best:')} <b className="accent">{fmtNum(best)} {st.unit}</b>{last ? ` · ${t('last')} ${fmtDate(last.d)}: ${last.sets.map(s => setLabel(ex.id, s, last.target)).join(', ')}` : ''}</div>}
+    {best > 0 && <div className="small row" style={{ marginBottom: 6, gap: 5, flexWrap: 'wrap' }}><Icon name="trophy" style={{ fontSize: 14, color: 'var(--yellow)' }} />{t('Best:')} <b className="accent" dir="ltr">{fmtNum(best)} {st.unit}</b>{last ? <> · {t('last')} {fmtDate(last.d)}: <span dir="ltr" className="bidi-ltr">{last.sets.map(s => setLabel(ex.id, s, last.target)).join(', ')}</span></> : ''}</div>}
     <Button variant="primary" icon="plus" style={{ margin: '10px 0 4px' }} onClick={() => addToRoutineSheet(ex)}>{t('Add to my plan')}</Button>
     {ex.custom && <div className="row" style={{ gap: 8, marginTop: 8 }}>
       <Button icon="pencil" style={{ flex: 1 }} onClick={() => { close(); customExSheet(ex) }}>{t('Edit')}</Button>
@@ -366,12 +368,12 @@ function AddToRoutine({ ex, close }) {
         if (r) r.ex.push({ id: ex.id, ...cfg })
       })
       const r = isNew ? S().routines[S().routines.length - 1] : st.routines.find(x => x.id === rid)
-      toast(t('“{0}” added to {1}', ex.n, r ? r.name : t('routine')))
+      toast(t('“{0}” added to {1}', exName(ex), r ? r.name : t('routine')))
       if (isNew && r) nav('/plan/r/' + r.id)
     }, null, isNew ? null : st.routines.find(x => x.id === rid))
   }
   return <>
-    <h3 className="capitalize">{t('Add “{0}”', ex.n)}</h3>
+    <h3 className="capitalize">{t('Add “{0}”', exName(ex))}</h3>
     <div className="muted small" style={{ marginBottom: 12 }}>{t('Pick a routine — sets, reps & weight come next.')}</div>
     <div className="list">
       {st.routines.map(r => <div key={r.id} className="item" onClick={() => pick(r.id)}>
@@ -466,8 +468,8 @@ function ExercisePicker({ onPick, close }) {
   const all = allExercises(st)
   let base = all.filter(e =>
     (bp === '★' ? usage[e.id] : (!bp || e.bp === bp)) &&
-    (!ql || e.n.toLowerCase().includes(ql) || e.tg.includes(ql) || e.eq.includes(ql) || (e.desc || '').toLowerCase().includes(ql)))
-  if (bp === '★') base = [...base].sort((a, b) => (usage[b.id] - usage[a.id]) || (a.n < b.n ? -1 : 1))
+    (!ql || exName(e).toLowerCase().includes(ql) || e.n.toLowerCase().includes(ql) || e.tg.includes(ql) || t(e.tg).toLowerCase().includes(ql) || e.eq.includes(ql) || t(e.eq).toLowerCase().includes(ql) || (e.desc || '').toLowerCase().includes(ql)))
+  if (bp === '★') base = [...base].sort((a, b) => (usage[b.id] - usage[a.id]) || (exName(a) < exName(b) ? -1 : 1))
   const eqOpts = equipmentOf(base)
   // Drop the equipment filter if the search narrowed it away, so you never hit a dead end.
   const eqOn = eqOpts.includes(eq) ? eq : ''
@@ -475,10 +477,9 @@ function ExercisePicker({ onPick, close }) {
   const chosenCount = Object.keys(usage).length
   return <>
     <h3>{t('Add exercise')}</h3>
-    <div className="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
-      <input className="input" placeholder={t('Search {0} exercises…', all.length)} value={q} onChange={e => { setQ(e.target.value); setShown(50) }} /></div>
+    <SearchField placeholder={t('Search {0} exercises…', all.length)} value={q} onChange={e => { setQ(e.target.value); setShown(50) }} onClear={() => { setQ(''); setShown(50) }} />
     <div className="chips" style={{ margin: eqOpts.length > 1 ? '10px 0 6px' : '10px 0' }}>
-      {chosenCount > 0 && <button className={'chip' + (bp === '★' ? ' on' : '')} onClick={() => { setBp('★'); setEq(''); setShown(50) }}><Icon name="starFill" style={{ fontSize: 12, display: 'inline-block', marginRight: 4, verticalAlign: '-1px' }} />{t('Chosen')} ({chosenCount})</button>}
+      {chosenCount > 0 && <button className={'chip' + (bp === '★' ? ' on' : '')} onClick={() => { setBp('★'); setEq(''); setShown(50) }}><Icon name="starFill" style={{ fontSize: 12, display: 'inline-block', marginInlineEnd: 4, verticalAlign: '-1px' }} />{t('Chosen')} ({chosenCount})</button>}
       <button className={'chip nocap' + (!bp ? ' on' : '')} onClick={() => { setBp(''); setEq(''); setShown(50) }}>{t('All')}</button>
       {BODYPARTS.map(b => <button key={b} className={'chip' + (bp === b ? ' on' : '')} onClick={() => { setBp(b); setEq(''); setShown(50) }}>{t(b)}</button>)}
     </div>
@@ -491,10 +492,13 @@ function ExercisePicker({ onPick, close }) {
         <div className="thumb thumb-x"><Icon name="sparkles" /></div>
         <div className="grow"><div className="tt">{t('Create your own exercise')}</div><div className="ss">{t('name + body part, no animation')}</div></div><Icon name="plus" className="chev" />
       </div>}
-      {f.slice(0, shown).map(e => <div key={e.id} className="item" onClick={() => onPick(e)}>
-        <Thumb ex={e} /><div className="grow"><div className="tt capitalize">{e.n}</div><div className="ss capitalize">{t(e.tg || e.bp)} · {t(e.eq)}</div></div>
-        {usage[e.id] && <span className="tag acc"><Icon name="starFill" /></span>}<Icon name="plus" className="chev" />
-      </div>)}
+      {f.slice(0, shown).map(e => {
+        const sub = exOrigName(e)
+        return <div key={e.id} className="item" onClick={() => onPick(e)}>
+          <Thumb ex={e} /><div className="grow"><div className="tt capitalize">{exName(e)}</div><div className="ss capitalize">{t(e.tg || e.bp)} · {t(e.eq)}{sub ? ` · ${sub}` : ''}</div></div>
+          {usage[e.id] && <span className="tag acc"><Icon name="starFill" /></span>}<Icon name="plus" className="chev" />
+        </div>
+      })}
       {f.length === 0 && bp === '★' && <div className="empty">{t('Nothing chosen yet — add exercises and they’ll show up here.')}</div>}
     </div>
     {f.length > shown && <><div style={{ height: 8 }} /><Button onClick={() => setShown(s => s + 50)}>{t('Show more')}</Button></>}
@@ -531,72 +535,68 @@ function ProgressionFields({ ex, mode, c, setC, routine, unit }) {
 
 function ExConfig({ ex, existing, onSave, onDelete, close, routine, initial }) {
   const st = useStore(s => s.S)
-  const cardio = isCardio(ex.id)
+  const cardioEx = isCardio(ex.id)
+  const machineCardio = isMachineCardio(ex.id)
+  const assisted = isAssistedEq(ex.id)
+  const stretch = isStretch(ex.id)
   const [c, setC] = useState(existing || initial || defaultConfig(ex.id))
-  // Cardio keeps its own duration+speed form; the reps/time choice (issue #16) is offered for
-  // everything else, which is where the gap was — planks, hangs, wall sits, loaded carries.
-  const mode = cardio ? 'cardio' : modeOf({ ...c, id: ex.id })
-  // Both default from the dataset and are then whatever the config says — see isBw.
+  const mode = modeOf({ ...c, id: ex.id })
+  const cardio = mode === 'cardio'
   const bw = !cardio && isBw({ ...c, id: ex.id })
   const perSide = isPerSide(c)
-  // Keep whatever the other mode already had (sets, weight) and fill only what is missing.
-  const setMode = m => setC(x => ({ ...defaultConfig(ex.id, m), ...x, mode: m }))
+  const setMode = m => setC(x => {
+    const base = defaultConfig(ex.id, m)
+    if (m === 'cardio' && !machineCardio && base.speed > 0 && x.speed == null) base.speed = 0
+    return { ...base, ...x, mode: m }
+  })
   const save = () => {
     close()
-    const sets = Math.max(1, Math.round(c.sets) || (cardio ? 1 : 3))
-    // Only carry progression settings that differ from the inherited default, so a plan file
-    // stays readable and "follow the routine" keeps meaning exactly that.
+    const sets = Math.max(1, Math.round(c.sets) || (cardio || stretch ? 1 : 3))
     const prog = {}
     if (c.prog) prog.prog = c.prog
     if (c.inc > 0) prog.inc = c.inc
-    // Written only when it differs from what the dataset already says, so a barbell config
-    // stays exactly the shape it was before these flags existed.
-    // `bodyweight` is true of a hold as much as of a set of reps; `side` is not — it counts
-    // reps, and a timed hold has none. Switching an exercise to Time therefore drops it
-    // rather than carrying a flag nothing downstream can read.
     const flags = {}
     if (bw !== isBodyweightEq(ex.id)) flags.bodyweight = bw
-    if (cardio) onSave({ sets, min: Math.max(1, Math.round(c.min) || 20), speed: Math.max(0, c.speed || 8) })
-    else if (mode === 'time') onSave({ sets, mode: 'time', sec: Math.max(1, Math.round(c.sec) || 45), weight: Math.max(0, c.weight || 0), ...flags, ...prog })
+    if (cardio) onSave({ sets, mode: 'cardio', min: Math.max(1, Math.round(c.min) || 20), speed: Math.max(0, Number(c.speed ?? (machineCardio ? 8 : 0)) || 0) })
+    else if (mode === 'time') onSave({ sets, mode: 'time', sec: Math.max(1, Math.round(c.sec) || (stretch ? 30 : 45)), weight: Math.max(0, c.weight || 0), ...flags, ...prog })
     else {
-      // A unilateral target is stored even: the split has to divide, and a typed 15 would
-      // otherwise plan seven reps on one side and eight on the other, every session.
       const typed = Math.max(1, Math.round(c.reps) || 10)
       const reps = perSide ? Math.ceil(typed / 2) * 2 : typed
       const out = { sets, mode: 'reps', reps, weight: Math.max(0, c.weight || 0), ...flags, ...(perSide ? { side: true } : {}), ...prog }
       if (policyFor({ ...c, id: ex.id }, routine, 'reps') === 'double') out.repsMin = Math.min(reps, Math.max(1, Math.round(c.repsMin) || Math.max(1, reps - 2)))
-      // A ceiling below the working reps would tell you to add a set on day one.
       if (bw && !(out.weight > 0) && c.repsMax > 0) out.repsMax = Math.max(reps, Math.round(c.repsMax))
       onSave(out)
     }
   }
+  const modeOptions = cardioEx
+    ? [{ value: 'cardio', label: t('Cardio') }, { value: 'time', label: t('Time') }, { value: 'reps', label: t('Reps') }]
+    : [{ value: 'reps', label: t('Reps') }, { value: 'time', label: t('Time') }]
+  const weightLbl = assisted ? t('Assist ({0})', st.unit) : t('Weight ({0})', st.unit)
   return <>
-    <h3 className="capitalize">{ex.n}</h3>
+    <h3 className="capitalize">{exName(ex)}</h3>
     <Media ex={ex} />
     <div className="row" style={{ gap: 6, flexWrap: 'wrap', margin: '10px 0 14px' }}>
       {cardio && <span className="tag acc"><Icon name="figureRun" />{t('Cardio')}</span>}
+      {stretch && <span className="tag acc"><Icon name="stretch" />{t('Stretch')}</span>}
       <span className="tag">{t(ex.tg || ex.bp)}</span><span className="tag">{t(ex.eq)}</span>
     </div>
     {ex.desc && <div className="exnote">{ex.desc}</div>}
-    {!cardio && <div style={{ marginBottom: 14 }}>
-      <Segmented className="seg-range" value={mode} onChange={setMode}
-        options={[{ value: 'reps', label: t('Reps') }, { value: 'time', label: t('Time') }]} />
-    </div>}
+    <div style={{ marginBottom: 14 }}>
+      <Segmented className="seg-range" value={mode} onChange={setMode} options={modeOptions} />
+    </div>
     <div className="row cfgrow" style={{ marginBottom: mode === 'time' ? 8 : 18 }}>
       {cardio ? <>
         <Stepper label={t('Intervals')} value={c.sets} step={1} decimal={false} onChange={v => setC(x => ({ ...x, sets: v }))} />
-        <Stepper label={t('Minutes')} value={c.min} step={1} decimal={false} onChange={v => setC(x => ({ ...x, min: v }))} />
-        <Stepper label={t('Speed (km/h)')} value={c.speed} step={0.5} onChange={v => setC(x => ({ ...x, speed: v }))} />
+        <Stepper label={t('Minutes')} value={c.min ?? 20} step={1} decimal={false} onChange={v => setC(x => ({ ...x, min: v }))} />
+        {(machineCardio || (c.speed || 0) > 0) && <Stepper label={t('Speed (km/h)')} value={c.speed ?? 8} step={0.5} onChange={v => setC(x => ({ ...x, speed: v }))} />}
       </> : mode === 'time' ? <>
         <Stepper label={t('Sets')} value={c.sets} step={1} decimal={false} onChange={v => setC(x => ({ ...x, sets: v }))} />
-        <Stepper label={t('Seconds')} value={c.sec} step={5} decimal={false} onChange={v => setC(x => ({ ...x, sec: v }))} />
-        <Stepper label={t('Weight ({0})', st.unit)} value={c.weight} step={2.5} onChange={v => setC(x => ({ ...x, weight: v }))} />
+        <Stepper label={t('Seconds')} value={c.sec ?? 45} step={5} decimal={false} onChange={v => setC(x => ({ ...x, sec: v }))} />
+        {!bw && <Stepper label={weightLbl} value={c.weight ?? 0} step={2.5} onChange={v => setC(x => ({ ...x, weight: v }))} />}
       </> : <>
         <Stepper label={t('Sets')} value={c.sets} step={1} decimal={false} onChange={v => setC(x => ({ ...x, sets: v }))} />
-        <Stepper label={t('Reps')} value={c.reps} step={perSide ? 2 : 1} decimal={false} onChange={v => setC(x => ({ ...x, reps: v }))} />
-        {/* On bodyweight work the weight stepper is the click #32 is about, so it is not here
-            until there is a belt to describe — see the added-weight row below. */}
-        {!bw && <Stepper label={t('Weight ({0})', st.unit)} value={c.weight} step={2.5} onChange={v => setC(x => ({ ...x, weight: v }))} />}
+        <Stepper label={t('Reps')} value={c.reps ?? 10} step={perSide ? 2 : 1} decimal={false} onChange={v => setC(x => ({ ...x, reps: v }))} />
+        {!bw && <Stepper label={weightLbl} value={c.weight ?? 0} step={2.5} onChange={v => setC(x => ({ ...x, weight: v }))} />}
       </>}
     </div>
     {mode === 'time' && !bw && <div className="small dim" style={{ marginBottom: 18 }}>
@@ -703,7 +703,7 @@ function PlanTools({ close }) {
     <div className="dim small" style={{ margin: '7px 2px 0', lineHeight: 1.4 }}>{t('A small file a friend imports into their own openGym — routines only, none of your workouts or weigh-ins.')}</div>
     {!MOBILE && <>
       <div style={{ height: 12 }} />
-      <Button variant="tinted" icon="download" onClick={() => { close(); printPlan(st, user?.name || '') }} disabled={!hasRoutines}>{t('Print / Save as PDF')}</Button>
+      <Button variant="tinted" icon="download" onClick={() => { close(); printPlan(st, '') }} disabled={!hasRoutines}>{t('Print / Save as PDF')}</Button>
       <div className="dim small" style={{ margin: '7px 2px 0', lineHeight: 1.4 }}>{t('A clean one-page-per-plan printout — no exercise ever splits across a page.')}</div>
     </>}
     {!hasRoutines && <div className="dim small" style={{ margin: '12px 2px 0' }}>{t('Add an exercise to a routine first — an empty plan has nothing to share.')}</div>}
@@ -801,8 +801,8 @@ function WorkoutDetail({ w, close }) {
       const ex = EXIDX[e.id]
       return <div key={i} className="row" style={{ marginBottom: 12, alignItems: 'flex-start' }}>
         {ex && <Thumb ex={ex} />}
-        <div className="grow"><div className="tt capitalize" style={{ fontWeight: 600 }}>{ex ? ex.n : (e.n || e.id)} {w.prs && w.prs.includes(e.id) && <span className="pr"><Icon name="trophy" />PR</span>}</div>
-          <div className="ss">{e.sets.filter(s => s.done).map(s => setLabel(e.id, s, e.target)).join('  ·  ') || t('no sets')}</div></div>
+        <div className="grow"><div className="tt capitalize" style={{ fontWeight: 600 }}>{ex ? exName(ex) : (e.n || e.id)} {w.prs && w.prs.includes(e.id) && <span className="pr"><Icon name="trophy" />PR</span>}</div>
+          <div className="ss"><span dir="ltr" className="bidi-ltr">{e.sets.filter(s => s.done).map(s => setLabel(e.id, s, e.target)).join('  ·  ') || t('no sets')}</span></div></div>
       </div>
     })}
     <Button variant="danger" onClick={() => confirmSheet({ title: t('Delete workout?'), message: t('This removes it from your history for good.'), confirmText: t('Delete'), danger: true, onConfirm: () => { update(s => { s.workouts = s.workouts.filter(x => x.id !== w.id) }); close(); toast(t('Workout deleted')) } })}>{t('Delete workout')}</Button>
@@ -811,37 +811,84 @@ function WorkoutDetail({ w, close }) {
 export const workoutDetailSheet = w => ui().openSheet(close => <WorkoutDetail w={w} close={close} />)
 
 /* ============================ calendar ============================ */
+const jParts = d => {
+  const f = new Intl.DateTimeFormat('en-u-ca-persian', { year: 'numeric', month: 'numeric', day: 'numeric' })
+  const m = Object.fromEntries(f.formatToParts(d).map(p => [p.type, p.value]))
+  return { jy: Number(m.year), jm: Number(m.month), jd: Number(m.day) }
+}
+function jalaliMonthRange(anchorDate) {
+  const cur = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), anchorDate.getDate(), 12)
+  const target = jParts(cur)
+  // Step backward to day 1 of this Jalali month
+  const start = new Date(cur)
+  while (jParts(start).jd > 1) start.setDate(start.getDate() - 1)
+  const days = []
+  const p = new Date(start)
+  while (jParts(p).jm === target.jm && jParts(p).jy === target.jy) {
+    days.push({ date: new Date(p), label: jParts(p).jd, iso: isoOf(p) })
+    p.setDate(p.getDate() + 1)
+  }
+  return { start, days, nextAnchor: new Date(p), prevAnchor: new Date(start.getTime() - 86400000) }
+}
+
 function Calendar({ start, close }) {
   const st = useStore(s => s.S)
-  const [cur, setCur] = useState(() => { const d = start ? new Date(start) : new Date(); d.setDate(1); return d })
-  const y = cur.getFullYear(), mo = cur.getMonth()
+  const useJalali = getLang() === 'fa' && getCal() === 'jalali'
+  const [cur, setCur] = useState(() => { const d = start ? new Date(start) : new Date(); if (!useJalali) d.setDate(1); return d })
   const byDay = {}
   st.workouts.forEach(w => (byDay[w.d] = byDay[w.d] || []).push(w))
-  const startOffset = (new Date(y, mo, 1).getDay() + 6) % 7
-  const daysIn = new Date(y, mo + 1, 0).getDate()
-  const monthWs = st.workouts.filter(w => w.d.startsWith(y + '-' + String(mo + 1).padStart(2, '0')))
+
+  let monthDays = []
+  let startOffset = 0
+  let headerLabel = ''
+  let goPrev, goNext
+
+  if (useJalali) {
+    const jm = jalaliMonthRange(cur)
+    monthDays = jm.days
+    // Saturday-first in Persian calendar (Sat=6 -> 0, Sun=0 -> 1 ... Fri=5 -> 6)
+    startOffset = (jm.start.getDay() + 1) % 7
+    headerLabel = fmtMonthYear(jm.start)
+    goPrev = () => setCur(jm.prevAnchor)
+    goNext = () => setCur(jm.nextAnchor)
+  } else {
+    const y = cur.getFullYear(), mo = cur.getMonth()
+    startOffset = (new Date(y, mo, 1).getDay() + 6) % 7
+    const daysIn = new Date(y, mo + 1, 0).getDate()
+    for (let d = 1; d <= daysIn; d++) {
+      const dt = new Date(y, mo, d, 12)
+      monthDays.push({ date: dt, label: d, iso: isoOf(dt) })
+    }
+    headerLabel = `${t(MONTHS_LONG[mo])} ${y}`
+    goPrev = () => setCur(new Date(y, mo - 1, 1))
+    goNext = () => setCur(new Date(y, mo + 1, 1))
+  }
+
+  const isoSet = new Set(monthDays.map(x => x.iso))
+  const monthWs = st.workouts.filter(w => isoSet.has(w.d))
   const monthVol = monthWs.reduce((a, w) => a + (w.vol || 0), 0)
   const monthMs = monthWs.reduce((a, w) => a + Math.max(0, (w.end || w.start) - w.start), 0)
   const cells = []
   for (let i = 0; i < startOffset; i++) cells.push(<div key={'e' + i} />)
-  for (let d = 1; d <= daysIn; d++) {
-    const iso = y + '-' + String(mo + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0')
+  for (const item of monthDays) {
+    const { iso, label } = item
     const ws = byDay[iso], effId = effectiveRoutineId(st, iso), ovr = st.dayPlan[iso] !== undefined
     const dotCls = ws ? 'done' : ovr && effId ? 'ovr' : effId ? 'plan' : ''
-    cells.push(<button key={d} className={'cal-d' + (ws ? ' has' : '') + (iso === todayISO() ? ' today' : '')} onClick={() => {
+    cells.push(<button key={iso} className={'cal-d' + (ws ? ' has' : '') + (iso === todayISO() ? ' today' : '')} onClick={() => {
       if (!ws) { close(); dayOverrideSheet(iso); return }
       if (ws.length === 1) { close(); workoutDetailSheet(ws[0]); return }
       close(); ui().openSheet(c2 => <><h3>{fmtDate(iso, true)}</h3><div className="list">{ws.map(w => <WorkoutRow key={w.id} w={w} onClick={() => { c2(); workoutDetailSheet(w) }} />)}</div></>)
-    }}><span>{d}</span><i className={dotCls} /></button>)
+    }}><span>{label}</span><i className={dotCls} /></button>)
   }
+  const weekHeads = useJalali ? ['Sa', 'Su', 'Mo', 'Tu', 'We', 'Th', 'Fr'] : ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
   return <>
     <div className="row between" style={{ marginBottom: 2 }}>
-      <button className="iconbtn" onClick={() => setCur(new Date(y, mo - 1, 1))} aria-label="Previous month"><Icon name="chevronLeft" /></button>
-      <h3 style={{ margin: 0 }}>{t(MONTHS_LONG[mo])} {y}</h3>
-      <button className="iconbtn" onClick={() => setCur(new Date(y, mo + 1, 1))} aria-label="Next month"><Icon name="chevronRight" /></button>
+      <button className="iconbtn rtl-flip" onClick={goPrev} aria-label="Previous month"><Icon name="chevronLeft" /></button>
+      <h3 style={{ margin: 0 }}>{headerLabel}</h3>
+      <button className="iconbtn rtl-flip" onClick={goNext} aria-label="Next month"><Icon name="chevronRight" /></button>
     </div>
     <div className="small muted" style={{ textAlign: 'center' }}>{monthWs.length ? `${t(monthWs.length === 1 ? '{0} workout' : '{0} workouts', monthWs.length)} · ${fmtDur(monthMs)} · ${fmtVol(monthVol, st.unit)}` : t('No workouts this month')}</div>
-    <div className="cal-grid">{['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map(l => <div key={l} className="cal-h">{t(l)}</div>)}{cells}</div>
+    <div className="cal-grid">{weekHeads.map(l => <div key={l} className="cal-h">{t(l)}</div>)}{cells}</div>
     <div className="cal-legend">
       <span><i style={{ background: 'var(--acc)' }} />{t('Trained')}</span>
       <span><i style={{ background: 'var(--label-3)' }} />{t('Planned')}</span>
@@ -922,7 +969,7 @@ function TopWeight({ entryIdx, close }) {
     } else toast(t('Tracked — next time starts at {0}', fmtNum(S().exWeights[entry.id].w) + ' ' + st.unit))
   }
   return <>
-    <h3 className="capitalize row" style={{ gap: 8 }}><Icon name="checkCircle" style={{ color: 'var(--acc)' }} />{t('{0} done', ex.n)}</h3>
+    <h3 className="capitalize row" style={{ gap: 8 }}><Icon name="checkCircle" style={{ color: 'var(--acc)' }} />{t('{0} done', exName(ex))}</h3>
     <div className="muted small">{t('Confirm the weight you worked with — your highest becomes the default next time.')}{!unitDone && unit.length > 1 ? ' ' + t('Then finish the superset partner.') : ''}</div>
     <WeightInput value={v} setValue={setV} unit={st.unit} />
     <div style={{ height: 10 }} />
@@ -953,17 +1000,17 @@ function FinishSummary({ w, prs, e1prs = [], close }) {
   return <div style={{ textAlign: 'center', padding: '8px 0' }}>
     <div style={{ fontSize: 44, display: 'flex', justifyContent: 'center', color: 'var(--acc)' }}><Icon name="trophy" /></div>
     <h3 style={{ margin: '8px 0' }}>{t('Workout complete!')}</h3>
-    <div className="tiles" style={{ textAlign: 'left' }}>
+    <div className="tiles" style={{ textAlign: 'start' }}>
       <div className="tile"><div className="l">{t('Duration')}</div><div className="v" style={{ fontSize: '1.1rem' }}>{fmtDur(w.end - w.start)}</div></div>
       <div className="tile"><div className="l">{t('Volume')}</div><div className="v" style={{ fontSize: '1.1rem' }}>{fmtVol(w.vol, st.unit)}</div></div>
       <div className="tile"><div className="l">{t('Sets')}</div><div className="v" style={{ fontSize: '1.1rem' }}>{t('{0} sets · {1} work', setsDone(w), workSetsDone(w))}</div></div>
       <div className="tile"><div className="l">{t('PRs')}</div><div className="v" style={{ fontSize: 20 }}>{prs.length || '—'}</div></div>
     </div>
-    {(prs.length > 0 || e1prs.length > 0) && <div style={{ textAlign: 'left', marginBottom: 12 }}>
-      {prs.map(id => <div key={id} className="small accent capitalize row" style={{ gap: 5 }}><Icon name="trophy" style={{ fontSize: 13 }} />{t('New PR:')} {(EXIDX[id] || {}).n || id}</div>)}
-      {e1prs.map(p => <div key={p.id} className="small accent capitalize row" style={{ gap: 5 }}><Icon name="chartLine" style={{ fontSize: 13 }} />{t('Best estimated 1RM:')} {(EXIDX[p.id] || {}).n || p.id} · {fmtNum(p.est)} {st.unit}</div>)}
+    {(prs.length > 0 || e1prs.length > 0) && <div style={{ textAlign: 'start', marginBottom: 12 }}>
+      {prs.map(id => <div key={id} className="small accent capitalize row" style={{ gap: 5 }}><Icon name="trophy" style={{ fontSize: 13 }} />{t('New PR:')} {exName(EXIDX[id]) || id}</div>)}
+      {e1prs.map(p => <div key={p.id} className="small accent capitalize row" style={{ gap: 5 }}><Icon name="chartLine" style={{ fontSize: 13 }} />{t('Best estimated 1RM:')} {exName(EXIDX[p.id]) || p.id} · <span dir="ltr">{fmtNum(p.est)} {st.unit}</span></div>)}
     </div>}
-    <h4 className="sec" style={{ textAlign: 'left' }}>{t('What you just trained')}</h4>
+    <h4 className="sec" style={{ textAlign: 'start' }}>{t('What you just trained')}</h4>
     <BodyMap load={loadOfWorkouts([w])} body={st.body} />
     <div style={{ height: 14 }} />
     <Button variant="primary" onClick={() => { close(); nav('/home') }}>{t('Nice!')}</Button>

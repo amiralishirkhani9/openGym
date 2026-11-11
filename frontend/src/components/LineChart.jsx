@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react'
-import { fmtNum, fmtDate, MONTHS, isoOf } from '../lib/format.js'
+import { fmtNum, fmtDate, fmtDayNum, fmtMonthShort, MONTHS, isoOf } from '../lib/format.js'
 import { t } from '../lib/i18n.js'
 
 const W = 340   // viewBox width; the svg stretches to its container, height comes from `h`
@@ -70,11 +70,11 @@ export default function LineChart({ points, h = 150, unit = '', color = 'var(--a
     const d0 = new Date(t0), d1 = new Date(t1)
     const ticks = []
     let m = new Date(d0.getFullYear(), d0.getMonth() + 1, 1)
-    while (m <= d1) { ticks.push({ t: +m, txt: t(MONTHS[m.getMonth()]) }); m = new Date(m.getFullYear(), m.getMonth() + 1, 1) }
+    while (m <= d1) { ticks.push({ t: +m, txt: fmtMonthShort(m) }); m = new Date(m.getFullYear(), m.getMonth() + 1, 1) }
     if (ticks.length === 0 && !single) {
       for (let i = 0; i <= 2; i++) {
         const tv = t0 + (t1 - t0) * i / 2, dd = new Date(tv)
-        ticks.push({ t: tv, txt: dd.getDate() + ' ' + t(MONTHS[dd.getMonth()]), anchor: i === 0 ? 'start' : i === 2 ? 'end' : 'middle' })
+        ticks.push({ t: tv, txt: fmtDayNum(dd) + ' ' + fmtMonthShort(dd), anchor: i === 0 ? 'start' : i === 2 ? 'end' : 'middle' })
       }
     }
     const every = Math.max(1, Math.ceil(ticks.length / 7))

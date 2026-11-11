@@ -6,29 +6,38 @@
 import { useSyncExternalStore } from 'react'
 import {
   LANGS, INSTR_LANGS, DATE_LOCALES, RTL_LANGS,
-  getLang, dateLocale, t, instrFor, getVersion, isRTL, _setLangState
+  getLang, getCal, dateLocale, t, exName, exOrigName, instrFor, getVersion, isRTL,
+  _setLangState, _setCalState
 } from './i18n-core.js'
 
-export { LANGS, INSTR_LANGS, DATE_LOCALES, RTL_LANGS, getLang, dateLocale, t, instrFor, isRTL }
+export { LANGS, INSTR_LANGS, DATE_LOCALES, RTL_LANGS, getLang, getCal, dateLocale, t, exName, exOrigName, instrFor, isRTL }
 
 // Vite code-splits each locale pack into its own chunk via import.meta.glob; instructions use
 // the same mechanism in src/instr/. Both are lazy, so the production bundle ships English only.
 const localePacks = import.meta.glob('../locales/*.js')
+const exNamePacks = import.meta.glob('../locales/ex/*.js')
 const instrPacks = import.meta.glob('../instr/*.js')
 
 // React subscription bookkeeping — kept here, not in core, so core has zero React coupling.
 const subs = new Set()
 const notify = () => { subs.forEach(f => f()) }
 
+export function setCal(c) {
+  _setCalState(c)
+  notify()
+}
+
 export async function setLang(l) {
   if (!LANGS[l]) l = 'en'
   if (l === getLang() && getVersion() > 0) return
-  let dict = {}, instr = null
+  let dict = {}, instr = null, exNames = null
   try {
     dict = l === 'en' ? {} : (await localePacks['../locales/' + l + '.js']()).default
     instr = l === 'en' || !INSTR_LANGS.includes(l) ? null : (await instrPacks['../instr/' + l + '.js']()).default
-  } catch (e) { dict = {}; instr = null }
-  _setLangState(l, dict, instr)
+    const exLoader = exNamePacks['../locales/ex/' + l + '.js']
+    if (exLoader) exNames = (await exLoader()).default
+  } catch (e) { dict = {}; instr = null; exNames = null }
+  _setLangState(l, dict, instr, exNames)
   notify()
 }
 

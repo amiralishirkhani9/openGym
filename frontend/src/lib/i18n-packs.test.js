@@ -135,4 +135,35 @@ describe('Persian pack', () => {
     // Allowing for a handful of unit/abbreviation passthroughs.
     expect(persian.length).toBeGreaterThan(values.length * 0.9)
   })
+
+  it('translates all exercise bodyparts, equipment, targets, muscles, policies, short days & months', async () => {
+    const fa = (await import('../locales/fa.js')).default
+    const { EXDB } = await import('./exercises-data.js')
+    const { DAYS, MONTHS } = await import('./format.js')
+    const { MUSCLE_NAME } = await import('./muscles.js')
+    const { POLICY_NAME, POLICY_DESC } = await import('./progression.js')
+    const keys = new Set([
+      ...EXDB.map(e => e.bp),
+      ...EXDB.map(e => e.eq),
+      ...EXDB.map(e => e.tg),
+      ...EXDB.flatMap(e => e.sm || []),
+      ...DAYS,
+      ...MONTHS,
+      ...Object.values(MUSCLE_NAME),
+      ...Object.values(POLICY_NAME),
+      ...Object.values(POLICY_DESC),
+    ].filter(Boolean))
+    const missing = [...keys].filter(k => !(k in fa))
+    expect(missing).toEqual([])
+  })
+
+  it('ships complete Persian exercise names and step-by-step instructions for all 1324 exercises', async () => {
+    const { EXDB } = await import('./exercises-data.js')
+    const exFa = (await import('../locales/ex/fa.js')).default
+    const instrFa = (await import('../instr/fa.js')).default
+    const missingNames = EXDB.filter(e => !exFa[e.id]).map(e => e.id)
+    const missingInstr = EXDB.filter(e => !Array.isArray(instrFa[e.id]) || instrFa[e.id].length !== (e.st || []).length).map(e => e.id)
+    expect(missingNames).toEqual([])
+    expect(missingInstr).toEqual([])
+  })
 })

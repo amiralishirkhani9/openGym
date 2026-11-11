@@ -289,8 +289,8 @@ export function buildSystemPrompt(S, lang, now = Date.now()) {
   const bwLine = bw.length ? bw.map(b => `${b.d} ${b.w}${unit}`).join(', ') : '(none)'
   const goal = S.targetW ? `${S.targetW}${unit}` : '(none)'
   const recent = (S.workouts || []).slice(-8).map(w => {
-    const r = routines.find(x => x.id === w.rid)
-    const sets = (w.ex || []).reduce((n, e) => n + (e.sets || []).filter(s => s.done).length, 0)
+    const r = routines.find(x => x.id === w.routineId)
+    const sets = (w.entries || []).reduce((n, e) => n + (e.sets || []).filter(s => s.done).length, 0)
     return `${w.d} ${r ? r.name : (w.name || 'freestyle')} (${sets} sets)`
   }).join('; ') || '(none)'
 

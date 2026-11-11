@@ -1,6 +1,6 @@
 // Pure helpers over the state object S (ported 1:1 from the vanilla app).
 import { todayISO, isoOf, weekKey, fmtNum } from './format.js'
-import { isCardio, isBodyweightEq } from './exercises.js'
+import { isCardio, isBodyweightEq, isStretch, isTimedHold } from './exercises.js'
 // i18n-core, not i18n: this file is imported by mcp/, which is plain Node with no Vite and no
 // React. i18n.js is the Vite half — import.meta.glob over the locale packs, useSyncExternalStore
 // for the hook — and it re-exports this very `t` from core, so nothing changes here except what
@@ -113,12 +113,15 @@ export function setLabel(id, s, cfg) {
 }
 // Default config for a freshly added exercise.
 export function defaultConfig(id, mode) {
-  const m = mode || modeOf({ id })
+  const m = mode || (isCardio(id) ? 'cardio' : (isStretch(id) || isTimedHold(id)) ? 'time' : modeOf({ id }))
   if (m === 'cardio') return { sets: 1, min: 20, speed: 8 }
   // Written only when it is true, so a barbell config is byte-for-byte what it was before
   // the flag existed and a plan file gains nothing it does not need.
   const bw = isBodyweightEq(id) ? { bodyweight: true } : {}
-  if (m === 'time') return { sets: 3, sec: 45, weight: 0, mode: 'time', ...bw }
+  if (m === 'time') {
+    const stretch = !mode && isStretch(id)
+    return { sets: stretch ? 1 : 3, sec: stretch ? 30 : 45, weight: 0, mode: 'time', ...bw }
+  }
   return { sets: 3, reps: 10, weight: 0, mode: 'reps', ...bw }
 }
 // One-line summary of a planned exercise ("3 × 10 · 60 kg"), shared by the routine editor
@@ -128,7 +131,7 @@ export function exLine(cfg, unit) {
   const n = cfg.sets || 1
   // Added weight reads as added: "+10 kg" on a dip belt, "60 kg" on a barbell.
   const load = cfg.weight ? ' · ' + (isBw(cfg) ? '+' : '') + fmtNum(cfg.weight) + ' ' + unit : ''
-  if (mode === 'cardio') return `${n} × ${cfg.min || 20} min @ ${fmtNum(cfg.speed || 8)} km/h`
+  if (mode === 'cardio') return `${n} × ${cfg.min || 20} min` + (cfg.speed > 0 ? ` @ ${fmtNum(cfg.speed)} km/h` : '')
   if (mode === 'time') return `${n} × ${fmtSec(cfg.sec || 45)}${load}`
   // This is the line with room for it, so the split is spelled out: "3 × 16 · 8/side".
   const split = isPerSide(cfg) ? ' · ' + t('{0}/side', fmtNum(sideReps(cfg.reps))) : ''

@@ -1,20 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { imgSrc, gifSrc } from '../lib/exercises.js'
 import { useStore } from '../store/useStore.js'
-import { t } from '../lib/i18n.js'
+import { t, exName } from '../lib/i18n.js'
 import Icon from './Icon.jsx'
 
-// Big autoplaying animation; tap toggles pause. `compact` shrinks it (superset cards).
-// Custom exercises have no media — the animation stays blank by design (issue #11).
-// `minimizable` (workout view) adds a persistent minimize/expand control so the animation stops
-// eating the screen; the chosen size is saved to settings and carries across exercises and
-// future workouts (issue #12).
-//
-// This is a <video>, not an <img>: the packaged animations are H.264 (see lib/exercises.js for
-// why). Pausing is therefore a property on the element rather than a source swap, which also
-// means the paused frame is the frame you were looking at instead of the dataset's still.
 export default function Media({ ex, id, compact, minimizable }) {
   const [playing, setPlaying] = useState(true)
+  const [zoomed, setZoomed] = useState(false)
   const vid = useRef(null)
   const gifSize = useStore(s => s.S.gifSize)
   const update = useStore(s => s.update)
@@ -33,29 +25,49 @@ export default function Media({ ex, id, compact, minimizable }) {
   if (!ex.gif) return null
   const mini = minimizable && gifSize === 'mini'
   const toggleSize = e => { e.stopPropagation(); update(s => { s.gifSize = mini ? 'full' : 'mini' }) }
+  const openZoom = e => { e.stopPropagation(); setZoomed(true) }
+  const label = exName(ex) || ex.n
   return (
-    <div className={'exmedia' + (compact ? ' compact' : '') + (mini ? ' mini' : '')} id={id} onClick={() => setPlaying(p => !p)}>
-      {/* poster is the still frame, so the card is never blank while the first packet decodes */}
-      <video
-        ref={vid}
-        src={gifSrc(ex)}
-        poster={imgSrc(ex)}
-        autoPlay loop muted playsInline
-        preload="auto"
-        disablePictureInPicture
-        aria-label={ex.n}
-      />
-      {minimizable && (
-        <button className="giftoggle" onClick={toggleSize}>
-          <Icon name={mini ? 'expand' : 'minimize'} />{mini ? t('Expand') : t('Minimize')}
-        </button>
+    <>
+      <div className={'exmedia' + (compact ? ' compact' : '') + (mini ? ' mini' : '')} id={id} onClick={() => setPlaying(p => !p)}>
+        {/* poster is the still frame, so the card is never blank while the first packet decodes */}
+        <video
+          ref={vid}
+          src={gifSrc(ex)}
+          poster={imgSrc(ex)}
+          autoPlay loop muted playsInline
+          preload="auto"
+          disablePictureInPicture
+          aria-label={label}
+        />
+        {!compact && !mini && (
+          <button className="gifzoom" onClick={openZoom} aria-label={t('Fullscreen')}>
+            <Icon name="expand" />
+          </button>
+        )}
+        {minimizable && (
+          <button className="giftoggle" onClick={toggleSize}>
+            <Icon name={mini ? 'expand' : 'minimize'} />{mini ? t('Expand') : t('Minimize')}
+          </button>
+        )}
+        {!mini && (
+          <span className="gifhint">
+            <Icon name={playing ? 'pause' : 'play'} />{playing ? t('tap to pause') : t('tap to play')}
+          </span>
+        )}
+      </div>
+      {zoomed && (
+        <div className="media-zoom" onClick={() => setZoomed(false)}>
+          <button className="media-zoom-x" onClick={() => setZoomed(false)} aria-label={t('Close')}>
+            <Icon name="xmark" />
+          </button>
+          <div className="media-zoom-box" onClick={e => e.stopPropagation()}>
+            <video src={gifSrc(ex)} poster={imgSrc(ex)} autoPlay loop muted playsInline disablePictureInPicture />
+          </div>
+          <div className="media-zoom-cap">{label}</div>
+        </div>
       )}
-      {!mini && (
-        <span className="gifhint">
-          <Icon name={playing ? 'pause' : 'play'} />{playing ? t('tap to pause') : t('tap to play')}
-        </span>
-      )}
-    </div>
+    </>
   )
 }
 
